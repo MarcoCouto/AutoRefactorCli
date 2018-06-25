@@ -32,6 +32,7 @@ import java.util.List;
 
 import org.autorefactor.preferences.Preferences;
 import org.autorefactor.refactoring.RefactoringRule;
+import org.autorefactor.util.COEvolgy;
 
 /** Lists all the available refactoring rules. */
 public final class AllRefactoringRules {
@@ -169,7 +170,15 @@ public final class AllRefactoringRules {
                 new EnumSetRatherThanHashSetRefactoring(),
                 new RemoveUncheckedThrowsClausesRefactoring(),
                 new CapitalizeLongLiteralRefactoring(),
-                new SwitchRefactoring());
+                new SwitchRefactoring(),
+                // ENERGY-RELATED REFACTORINGS
+                new WakeLockRefactoring(COEvolgy.loadOperationFlag()),
+                new RecycleRefactoring(COEvolgy.loadOperationFlag()),
+                new ViewHolderRefactoring(COEvolgy.loadOperationFlag()),
+                new DrawAllocationRefactoring(COEvolgy.loadOperationFlag()),
+                new HashMapUsageRefactoring(COEvolgy.loadOperationFlag()),
+                new ExcessiveMethodCallsRefactoring(COEvolgy.loadOperationFlag())
+                );
     }
 
     private static List<RefactoringRule> newArrayList(RefactoringRule... refactorings) {
