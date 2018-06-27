@@ -775,7 +775,7 @@ public class COEvolgy {
 			fw = new FileWriter(file.getAbsoluteFile(), true);
 			bw = new BufferedWriter(fw);
 	
-			bw.write(tag);
+			bw.write(tag+"\n");
 			
 		} catch (IOException e) {
 			e.printStackTrace();
