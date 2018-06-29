@@ -21,6 +21,7 @@ import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -331,6 +332,7 @@ public class COEvolgy {
 		Expression exp = b.simpleName("Tracer");
 		String methodName = "trace";
 		MethodInvocation traceCall = b.invoke(exp, methodName, b.string(name));
+		ExpressionStatement traceStmt = b.getAST().newExpressionStatement(traceCall);
 		
 		if (this.insideStaticBlock) {
 			Initializer init = r.getAST().newInitializer();
@@ -340,13 +342,14 @@ public class COEvolgy {
 			return init;
 			
 		} else {
-			return traceCall;
+			return traceStmt;
 		}
 		
 	}
 	
 	
 	public static ASTNode getParentStatement(ASTNode node) {
+		
 		if (node == null) return null; // FIXME: add try-catch; should never enter here
 		
 		if (node instanceof Statement) {
