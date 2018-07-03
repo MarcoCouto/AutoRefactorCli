@@ -172,7 +172,7 @@ public final class AllRefactoringRules {
                 new CapitalizeLongLiteralRefactoring(),
                 new SwitchRefactoring(),
                 // ENERGY-RELATED REFACTORINGS
-                new WakeLockRefactoring(COEvolgy.loadOperationFlag()),
+                new WakelockRefactoring(COEvolgy.loadOperationFlag()),
                 new RecycleRefactoring(COEvolgy.loadOperationFlag()),
                 new ViewHolderRefactoring(COEvolgy.loadOperationFlag()),
                 new DrawAllocationRefactoring(COEvolgy.loadOperationFlag()),

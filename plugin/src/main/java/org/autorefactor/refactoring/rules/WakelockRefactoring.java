@@ -63,7 +63,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.internal.corext.dom.ASTNodes;
 
 /** See {@link #getDescription()} method. */
-public class WakeLockRefactoring extends AbstractRefactoringRule {
+public class WakelockRefactoring extends AbstractRefactoringRule {
 	
 	public static final String TAG = "Wakelock";
 	private static final String tracerImport = "org.greenlab.coevolgy.util.Tracer";
@@ -75,11 +75,11 @@ public class WakeLockRefactoring extends AbstractRefactoringRule {
 	private List<VariableDeclaration> fields;
 	private List<VariableDeclaration> variables;
 	
-	public WakeLockRefactoring() {
+	public WakelockRefactoring() {
 		super();
 	}
 	
-	public WakeLockRefactoring(int flag) {
+	public WakelockRefactoring(int flag) {
 		super();
 		operationFlag = flag;
 	}
