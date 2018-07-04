@@ -618,6 +618,7 @@ public class COEvolgy {
 		if (exp1 == null || exp2 == null) return false;
 		
 		if (exp1.getNodeType() == ASTNode.SIMPLE_NAME && exp2.getNodeType() == ASTNode.SIMPLE_NAME) {
+			
 			SimpleName exp1Name = (SimpleName) exp1;
 			SimpleName exp2Name = (SimpleName) exp2;
 			if (exp1Name.resolveBinding() == null || exp2Name.resolveBinding() == null) {
@@ -627,7 +628,7 @@ public class COEvolgy {
 				TypeDeclaration typeDeclExpr1 = (TypeDeclaration) ASTNodes.getParent(exp1, ASTNode.TYPE_DECLARATION);
 				TypeDeclaration typeDeclExpr2 = (TypeDeclaration) ASTNodes.getParent(exp2, ASTNode.TYPE_DECLARATION);
 				
-				return (exp1Name.equals(exp2Name) 
+				return (exp1Name.getIdentifier().equals(exp2Name.getIdentifier()) 
 						&& (methodExp1.getName().equals(methodExp2.getName()))
 						&& (typeDeclExpr1.getName().equals(typeDeclExpr2.getName()))
 				);

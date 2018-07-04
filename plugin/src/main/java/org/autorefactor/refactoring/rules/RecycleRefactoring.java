@@ -33,7 +33,9 @@ import static org.autorefactor.util.COEvolgy.MEASURE;
 import static org.autorefactor.util.COEvolgy.TRACE;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.autorefactor.refactoring.ASTBuilder;
 import org.autorefactor.refactoring.Refactorings;
@@ -48,11 +50,14 @@ import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Name;
+import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
+import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.internal.corext.dom.ASTNodes;
 
 /* 
@@ -64,6 +69,12 @@ import org.eclipse.jdt.internal.corext.dom.ASTNodes;
  * TODO add support for FragmentTransaction.beginTransaction(). It can use method
  * chaining (which means local variable might not be present) and it can be released
  * by two methods: commit() and commitAllowingStateLoss()
+ * 
+ * FIXME: (medium priority) fix the infinite loop cycle.
+ * This rule has a strange issue: when a refactor is made, it goes through the contents 
+ * of the same file all over again. For now, after analyzing a file it stores its path, and 
+ * once it starts again the path of the file being analyzed is compared to the prevvious one.
+ * If they match, the rule is forced to not do anything. Sloppy solution, but it works for now.
  */
 
 /** See {@link #getDescription()} method. */
@@ -79,12 +90,22 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 	private List<VariableDeclaration> fields;
 	private List<VariableDeclaration> variables;
 	
+	private static String lastVisitedCU = "";
+	private static boolean alreadyVisitedCU = false;
+	
+	private Map<SimpleName, String> recycles;
+	private int countRecycles;
+	
 	public RecycleRefactoring() {
 		super();
+		this.recycles = new HashMap<>();
+		this.countRecycles = 0;
 	}
 	
 	public RecycleRefactoring(int flag) {
 		super();
+		this.recycles = new HashMap<>();
+		this.countRecycles = 0;
 		operationFlag = flag;
 	}
 
@@ -112,6 +133,9 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
     
     @Override
     public boolean visit(CompilationUnit node) {
+    	if (node.getJavaElement().getPath().toString().equals(lastVisitedCU)) {
+    		alreadyVisitedCU = true;
+    	}
     	List<ImportDeclaration> allImports = node.imports();
 		foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
 		
@@ -121,6 +145,10 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 		this.variables = new ArrayList<>();
 		
 		return VISIT_SUBTREE;
+    }
+    
+    public void endVisit(CompilationUnit node) {
+    	lastVisitedCU = node.getJavaElement().getPath().toString();
     }
     
     @Override
@@ -143,6 +171,12 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 		
 		else return VISIT_SUBTREE;
 	}
+    
+    @Override
+    public boolean visit(MethodDeclaration node) {
+    	this.recycles.clear();
+    	return true;
+    }
     
     @Override
     public void endVisit(MethodDeclaration node) {
@@ -297,15 +331,71 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 		return null;
 	}
 	
-    @Override
-    public boolean visit(MethodInvocation node) {
+	@Override
+	public boolean visit(ReturnStatement node) {
+		if (alreadyVisitedCU) return VISIT_SUBTREE;
+		
 		final ASTBuilder b = this.ctx.getASTBuilder();
 		final Refactorings r = this.ctx.getRefactorings();
-		String recycleMethodName = methodNameToCleanupResource(node);
-		if(recycleMethodName != null){
-			SimpleName cursorExpression = null;
+		
+		for (SimpleName cursorExpression : this.recycles.keySet()) {
+			String recycleCallName = this.recycles.get(cursorExpression);
+			MethodInvocation closeInvocation = b.getAST().newMethodInvocation();
+			
+			closeInvocation.setName(b.simpleName(recycleCallName));
+			closeInvocation.setExpression(b.copy(cursorExpression));
+			ExpressionStatement expressionStatement = b.getAST().newExpressionStatement(closeInvocation);
+			MethodDeclaration methodDecl = (MethodDeclaration) ASTNodes.getParent(node, ASTNode.METHOD_DECLARATION);
+		
+			countRecycles++;
+			if (node.getExpression().getNodeType() == ASTNode.METHOD_INVOCATION 
+					&& COEvolgy.isSameLocalVariable(((MethodInvocation)node.getExpression()).getExpression(), cursorExpression) ) {
+				Type returnType = methodDecl.getReturnType2();
+				SimpleName auxVarName = b.simpleName("__aux_" + countRecycles);
+				VariableDeclarationStatement auxVarDecl = b.declareStmt(b.copy(returnType), 
+																		auxVarName, 
+																		b.copy(node.getExpression()));
+				r.insertBefore(auxVarDecl, node);
+				r.insertBefore(expressionStatement, node);
+				r.insertBefore(b.return0(b.copy(auxVarName)), node);
+				
+				// [Insert trace statement]
+    			COEvolgy.traceRefactoring(TAG);
+				if (operationFlag == TRACE) {
+					COEvolgy helper = new COEvolgy(this.ctx, false);
+					ASTNode traceNode = helper.buildTraceNode(TAG);
+					r.insertBefore(traceNode, node);
+				}
+				
+				r.remove(node);
+			} else {
+				r.insertBefore(expressionStatement, node);
+    			
+    			// [Insert trace statement]
+    			COEvolgy.traceRefactoring(TAG);
+				if (operationFlag == TRACE) {
+					COEvolgy helper = new COEvolgy(this.ctx, false);
+					ASTNode traceNode = helper.buildTraceNode(TAG);
+					r.insertBefore(traceNode, node);
+				}
+				return DO_NOT_VISIT_SUBTREE;
+    			
+			}
+		
+			return DO_NOT_VISIT_SUBTREE;
+		}
+		return VISIT_SUBTREE;
+	}
+	
+    @Override
+    public boolean visit(MethodInvocation node) {
+    	if (alreadyVisitedCU) return VISIT_SUBTREE;
+    	
+		String recycleCallName = methodNameToCleanupResource(node);
+		if(recycleCallName != null){
 			ASTNode variableAssignmentNode = null;
 			VariableDeclarationFragment variableDeclarationFragment = (VariableDeclarationFragment) ASTNodes.getParent(node, ASTNode.VARIABLE_DECLARATION_FRAGMENT);
+			SimpleName cursorExpression;
 			if(variableDeclarationFragment!=null){
 				cursorExpression = variableDeclarationFragment.getName();
 				variableAssignmentNode = variableDeclarationFragment;
@@ -316,18 +406,16 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 				variableAssignmentNode = variableAssignment;
 			}
 			// Check whether it has been closed
-			ClosePresenceChecker closePresenceChecker = new ClosePresenceChecker(cursorExpression, recycleMethodName);
+			ClosePresenceChecker closePresenceChecker = new ClosePresenceChecker(cursorExpression, recycleCallName);
 			VisitorDecorator visitor = new VisitorDecorator(variableAssignmentNode, cursorExpression, closePresenceChecker);
     		Block block = (Block) ASTNodes.getParent(node, ASTNode.BLOCK);
     		block.accept(visitor);
     		if(!closePresenceChecker.closePresent){
-    			MethodInvocation closeInvocation = b.getAST().newMethodInvocation();
-        		closeInvocation.setName(b.simpleName(recycleMethodName));
-        		closeInvocation.setExpression(b.copy(cursorExpression));
-        		ExpressionStatement expressionStatement = b.getAST().newExpressionStatement(closeInvocation);
-        		Statement lastCursorAccess = closePresenceChecker.getLastCursorStatementInBlock(block);
-        		if(lastCursorAccess.getNodeType() != ASTNode.RETURN_STATEMENT){
+    			this.recycles.put(cursorExpression, recycleCallName);
+        		/*if(lastCursorAccess.getNodeType() != ASTNode.RETURN_STATEMENT){
+        			expressionStatement.accept(this);
         			r.insertAfter(expressionStatement, lastCursorAccess);
+        			
         			// [Insert trace statement]
         			COEvolgy.traceRefactoring(TAG);
     				if (operationFlag == TRACE) {
@@ -336,7 +424,7 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
     					r.insertAfter(traceNode, lastCursorAccess);
     				}
         			return DO_NOT_VISIT_SUBTREE;
-        		}
+        		}*/
     		}
     	}
     	return VISIT_SUBTREE;
@@ -368,6 +456,12 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
     			lastCursorStatement = lastCursorStatement.getParent();
     		}
     		return (Statement) lastCursorStatement;
+    	}
+    	
+    	
+    	public Statement getLastCursorStatementInBlock(MethodDeclaration node) {
+    		Block block = node.getBody();
+    		return getLastCursorStatementInBlock(block);
     	}
 
 
@@ -451,5 +545,6 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 			return visitor.visit(node);
 		}
 	}
+	
 
 }
