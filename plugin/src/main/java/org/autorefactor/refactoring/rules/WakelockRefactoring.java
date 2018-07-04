@@ -309,6 +309,7 @@ public class WakelockRefactoring extends AbstractRefactoringRule {
 		SuperMethodInvocation superMethodInvocation = b.getAST().newSuperMethodInvocation();
 		superMethodInvocation.setName(b.simpleName("onPause"));
 		// [Insert trace statement]
+		COEvolgy.traceRefactoring(TAG);
 		if (operationFlag == TRACE) {
 			COEvolgy helper = new COEvolgy(this.ctx, false);
 			Statement traceNode = (Statement) helper.buildTraceNode(TAG);
