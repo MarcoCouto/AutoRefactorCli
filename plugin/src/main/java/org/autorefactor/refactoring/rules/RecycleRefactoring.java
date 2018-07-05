@@ -135,7 +135,9 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
     public boolean visit(CompilationUnit node) {
     	if (node.getJavaElement().getPath().toString().equals(lastVisitedCU)) {
     		alreadyVisitedCU = true;
+    		return VISIT_SUBTREE;
     	}
+    	alreadyVisitedCU = false;
     	List<ImportDeclaration> allImports = node.imports();
 		foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
 		
@@ -360,7 +362,6 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 				r.insertBefore(b.return0(b.copy(auxVarName)), node);
 				
 				// [Insert trace statement]
-    			COEvolgy.traceRefactoring(TAG);
 				if (operationFlag == TRACE) {
 					COEvolgy helper = new COEvolgy(this.ctx, false);
 					ASTNode traceNode = helper.buildTraceNode(TAG);
@@ -372,7 +373,6 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 				r.insertBefore(expressionStatement, node);
     			
     			// [Insert trace statement]
-    			COEvolgy.traceRefactoring(TAG);
 				if (operationFlag == TRACE) {
 					COEvolgy helper = new COEvolgy(this.ctx, false);
 					ASTNode traceNode = helper.buildTraceNode(TAG);
@@ -381,6 +381,7 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 				return DO_NOT_VISIT_SUBTREE;
     			
 			}
+			COEvolgy.traceRefactoring(TAG);
 		
 			return DO_NOT_VISIT_SUBTREE;
 		}
