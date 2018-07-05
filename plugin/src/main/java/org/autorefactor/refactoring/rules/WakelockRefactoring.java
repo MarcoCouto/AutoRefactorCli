@@ -278,13 +278,13 @@ public class WakelockRefactoring extends AbstractRefactoringRule {
     	final ASTBuilder b = this.ctx.getASTBuilder();
     	IfStatement ifStatement = b.getAST().newIfStatement();
     	// test-clause
-    	PrefixExpression prefixExpression = b.getAST().newPrefixExpression();
-    	prefixExpression.setOperator(PrefixExpression.Operator.NOT);
+    	//PrefixExpression prefixExpression = b.getAST().newPrefixExpression();
+    	//prefixExpression.setOperator(PrefixExpression.Operator.NOT);
     	MethodInvocation isHeldInvocation = b.getAST().newMethodInvocation();
 		isHeldInvocation.setName(b.simpleName("isHeld"));
 		isHeldInvocation.setExpression(b.copyExpression(methodInvocation));
-		prefixExpression.setOperand(isHeldInvocation);
-		ifStatement.setExpression(prefixExpression);
+		//prefixExpression.setOperand(isHeldInvocation);
+		ifStatement.setExpression(isHeldInvocation);
 		// then
 		MethodInvocation releaseInvocation = b.getAST().newMethodInvocation();
 		releaseInvocation.setName(b.simpleName("release"));
