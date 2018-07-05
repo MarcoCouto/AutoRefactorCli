@@ -303,8 +303,8 @@ public class WakelockRefactoring extends AbstractRefactoringRule {
 		annotation.setTypeName(b.name("Override"));
 		onPauseDeclaration.modifiers().add(annotation);
 		//
-		Modifier protectedModifier = b.getAST().newModifier(ModifierKeyword.PROTECTED_KEYWORD);
-		onPauseDeclaration.modifiers().add(protectedModifier);
+		Modifier publicModifier = b.getAST().newModifier(ModifierKeyword.PUBLIC_KEYWORD);
+		onPauseDeclaration.modifiers().add(publicModifier);
 		//
 		SuperMethodInvocation superMethodInvocation = b.getAST().newSuperMethodInvocation();
 		superMethodInvocation.setName(b.simpleName("onPause"));
