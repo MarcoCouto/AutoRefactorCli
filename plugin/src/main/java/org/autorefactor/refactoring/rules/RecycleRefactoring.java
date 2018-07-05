@@ -357,27 +357,26 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 				VariableDeclarationStatement auxVarDecl = b.declareStmt(b.copy(returnType), 
 																		auxVarName, 
 																		b.copy(node.getExpression()));
-				r.insertBefore(auxVarDecl, node);
-				r.insertBefore(expressionStatement, node);
-				r.insertBefore(b.return0(b.copy(auxVarName)), node);
-				
 				// [Insert trace statement]
 				if (operationFlag == TRACE) {
 					COEvolgy helper = new COEvolgy(this.ctx, false);
 					ASTNode traceNode = helper.buildTraceNode(TAG);
 					r.insertBefore(traceNode, node);
 				}
+				r.insertBefore(auxVarDecl, node);
+				r.insertBefore(expressionStatement, node);
+				r.insertBefore(b.return0(b.copy(auxVarName)), node);
 				
 				r.remove(node);
 			} else {
-				r.insertBefore(expressionStatement, node);
-    			
-    			// [Insert trace statement]
+				// [Insert trace statement]
 				if (operationFlag == TRACE) {
 					COEvolgy helper = new COEvolgy(this.ctx, false);
 					ASTNode traceNode = helper.buildTraceNode(TAG);
 					r.insertBefore(traceNode, node);
 				}
+				r.insertBefore(expressionStatement, node);
+				
 				return DO_NOT_VISIT_SUBTREE;
     			
 			}
