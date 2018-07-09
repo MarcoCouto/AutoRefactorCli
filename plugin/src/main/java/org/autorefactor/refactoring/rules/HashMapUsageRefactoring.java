@@ -150,7 +150,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 			refactored = true;
 		}
 		
-		if (!foundTracerImport) {
+		if (operationFlag == TRACE && !foundTracerImport) {
 			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
 			Name importName = b.name(tracerImport.split("\\."));
 			importTracer.setName(importName);

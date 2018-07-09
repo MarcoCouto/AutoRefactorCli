@@ -159,7 +159,7 @@ public class RecycleRefactoring extends AbstractRefactoringRule {
 		final Refactorings r = ctx.getRefactorings();
 		boolean refactored = false;
 
-		if (!foundTracerImport) {
+		if (operationFlag == TRACE && !foundTracerImport) {
 			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
 			Name importName = b.name(tracerImport.split("\\."));
 			importTracer.setName(importName);

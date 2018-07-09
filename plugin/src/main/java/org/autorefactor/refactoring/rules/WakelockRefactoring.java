@@ -133,7 +133,7 @@ public class WakelockRefactoring extends AbstractRefactoringRule {
     
     @Override
     public boolean visit(ImportDeclaration node) {
-		if (!foundTracerImport) {
+		if (operationFlag == TRACE && !foundTracerImport) {
 			final ASTBuilder b = ctx.getASTBuilder();
 			final Refactorings r = ctx.getRefactorings();
 			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
