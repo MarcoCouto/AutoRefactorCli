@@ -10,6 +10,7 @@ import org.autorefactor.refactoring.ASTHelper;
 import org.autorefactor.refactoring.Refactorings;
 import org.autorefactor.util.COEvolgy;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
@@ -22,6 +23,7 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.Type;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
@@ -74,7 +76,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     /* VISITORS */
 
     @Override
-    public boolean visit(CompilationUnit node) {    	
+    public boolean visit(CompilationUnit node) {		
     	List<ImportDeclaration> allImports = node.imports();
     	foundArrayImport = COEvolgy.isImportIncluded(allImports, arrayMapImport);
     	foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
@@ -86,7 +88,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 
 	@Override
 	public boolean visit(FieldDeclaration node) {
-		if (node.getType().toString().startsWith("HashMap")) {
+		if (node.getType().toString().contains("HashMap")) {
 			return setDeclaration(node);
 		}
 		
@@ -96,7 +98,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 
 	@Override
 	public boolean visit(VariableDeclarationStatement node) {
-		if (node.getType().toString().startsWith("HashMap")) {
+		if (node.getType().toString().contains("HashMap")) {
 			return setDeclaration(node);
 		}
 		
@@ -105,7 +107,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	@Override
 	public boolean visit(ClassInstanceCreation node) {
-		if (node.getType().toString().startsWith("HashMap")) {
+		if (node.getType().toString().contains("HashMap")) {
 			final ASTBuilder b = this.ctx.getASTBuilder();
 			final Refactorings r = this.ctx.getRefactorings();
 			
@@ -172,11 +174,11 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 			ASTNode arg = (ASTNode) o;
 			if (arg.getNodeType() == ASTNode.SINGLE_VARIABLE_DECLARATION) {
 				SingleVariableDeclaration argVar = (SingleVariableDeclaration) arg;
-				if (argVar.getType().toString().startsWith("HashMap")) {
+				if (argVar.getType().toString().contains("HashMap")) {
 					final ASTBuilder b = this.ctx.getASTBuilder();
 			        final Refactorings r = this.ctx.getRefactorings();
 			        
-					Type newType = createGenericTypeCopy(newMapClass, argVar.getType(), b);
+					Type newType = createGenericTypeCopy(newMapClass, argVar.getType().toString(), b);
 					String varName = argVar.getName().getIdentifier();
 					SingleVariableDeclaration newArg = b.declareSingleVariable(varName, newType);
 					
@@ -190,20 +192,35 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	/* AUXILIAR METHODS */
 
-	private Type createGenericTypeCopy(String typeName, Type type, ASTBuilder b) {
-		String[] typeArgsStr = type.toString()
-								   .replaceAll(".+<(.+)>", "$1")
-								   .replaceAll(" ",  "")
-								   .split(",");
+	private Type createGenericTypeCopy(String arrayMapTypeName, String type, ASTBuilder b) {
+		String typeStr = type.replaceAll(" ", "");
 		
-		Type[] typeArgs = new Type[typeArgsStr.length];
+		String mainType = typeStr.substring(0, typeStr.indexOf("<"));  // The main type string.
+																	   // (Example: for "HashMap<Int, String>", it will return "HashMap" 
+		String newTypeName = mainType;
+		if (mainType.equals("HashMap")) newTypeName = arrayMapTypeName; 
+        String argsStr = typeStr.substring(typeStr.indexOf("<")+1, typeStr.lastIndexOf(">"));  // The generic type argument string.
+        																					   // (Example: for "HashMap<Int, String>", it will return "Int, String"
+        int lessthanIndex = argsStr.indexOf("<");
+        int commaIndex = argsStr.indexOf(",");
+        String[] splittedArgs = argsStr.split(",", 2);
+        if (lessthanIndex >= 0 && lessthanIndex < commaIndex) {
+        	splittedArgs = new String[1];
+        	splittedArgs[0] = argsStr;
+        }
+		
+		Type[] typeArgs = new Type[splittedArgs.length];
 		int i = 0;
-		for (String name : typeArgsStr) {
-			typeArgs[i] = b.type(name);
+		for (String name : splittedArgs) {
+			Type t = null;
+			if (name.contains("<")) t = createGenericTypeCopy(arrayMapTypeName, name, b);
+			else t = b.type(name);
+			
+			typeArgs[i] = t;
 			i++;
 		}
 		
-		return b.genericType(typeName, typeArgs);
+		return b.genericType(newTypeName, typeArgs);
 	}
 	
 	private void copyModifiers(List<Modifier> source, List<Modifier> dest, ASTBuilder b) {
@@ -226,7 +243,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
         final ASTBuilder b = this.ctx.getASTBuilder();
         final Refactorings r = this.ctx.getRefactorings();
         
-        Type newType = createGenericTypeCopy(newMapClass, node.getType(), b);
+        Type newType = createGenericTypeCopy(newMapClass, node.getType().toString(), b);
 		
 		for (Object o : node.fragments()) {
 			((ASTNode) o).accept(this);
@@ -247,7 +264,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
         final ASTBuilder b = this.ctx.getASTBuilder();
         final Refactorings r = this.ctx.getRefactorings();
         
-        Type newType = createGenericTypeCopy(newMapClass, node.getType(), b);
+        Type newType = createGenericTypeCopy(newMapClass, node.getType().toString(), b);
 		
 		for (Object o : node.fragments()) {
 			if (o instanceof VariableDeclarationFragment) {

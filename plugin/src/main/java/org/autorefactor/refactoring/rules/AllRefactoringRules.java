@@ -177,7 +177,8 @@ public final class AllRefactoringRules {
                 new ViewHolderRefactoring(COEvolgy.loadOperationFlag()),
                 new DrawAllocationRefactoring(COEvolgy.loadOperationFlag()),
                 new HashMapUsageRefactoring(COEvolgy.loadOperationFlag()),
-                new ExcessiveMethodCallsRefactoring(COEvolgy.loadOperationFlag())
+                new ExcessiveMethodCallsRefactoring(COEvolgy.loadOperationFlag()),
+                new TraceMethodsRefactoring(COEvolgy.loadOperationFlag())
                 );
     }
 

@@ -347,6 +347,28 @@ public class COEvolgy {
 		
 	}
 	
+	public ASTNode buildTraceMethodNode(String qualifiedName) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Expression exp = b.simpleName("Tracer");
+		String methodName = "traceMethod";
+		MethodInvocation traceCall = b.invoke(exp, methodName, b.string(qualifiedName));
+		ExpressionStatement traceStmt = b.getAST().newExpressionStatement(traceCall);
+		
+		if (this.insideStaticBlock) {
+			Initializer init = r.getAST().newInitializer();
+			Block body = b.block(r.getAST().newExpressionStatement(traceCall));
+			init.setBody(body);
+			init.modifiers().add(b.static0());
+			return init;
+			
+		} else {
+			return traceStmt;
+		}
+		
+	}
+	
 	
 	public static ASTNode getParentStatement(ASTNode node) {
 		

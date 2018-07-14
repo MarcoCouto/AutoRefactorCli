@@ -59,9 +59,6 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     private Map<String, Set<String>> conditionedVars;
     private Set<String> classVars;
 	
-	private static boolean toCheck = false;
-	private static final String checkFile = "ScatterGraph.java";
-	
 	public ExcessiveMethodCallsRefactoring () {
 		super();
 		
@@ -104,32 +101,24 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     @Override
     public boolean visit(CompilationUnit node) {
     	
-    	String filename = node.getJavaElement().getPath().toString();
-		if (filename.endsWith(checkFile)) {
-			toCheck = true;
-		}else {
-			toCheck = false;
-		}
+		this.phase++;
+		mainNode = node;
+		fileName = node.getJavaElement().getElementName();
+		packageName = node.getPackage().getName().getFullyQualifiedName();
+		ASTVisitor visitor;
 		
-		if (toCheck) {
-			this.phase++;
-			mainNode = node;
-			fileName = node.getJavaElement().getElementName();
-			packageName = node.getPackage().getName().getFullyQualifiedName();
-			ASTVisitor visitor;
-			
-			if (this.phase == 1) {
-				List<ImportDeclaration> allImports = node.imports();
-				foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
-				visitor = new ClassVarsVisitor();
-			} else if (this.phase == 2) {
-				visitor = new LoopVisitor();
-			} else {
-				visitor = new MethodCallVisitor();
-			}
-			node.accept(visitor);
+		if (this.phase == 1) {
+			List<ImportDeclaration> allImports = node.imports();
+			foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
+			visitor = new ClassVarsVisitor();
+		} else if (this.phase == 2) {
+			visitor = new LoopVisitor();
+		} else {
+			visitor = new MethodCallVisitor();
 		}
-		
+		node.accept(visitor);
+	
+	
     	return ASTHelper.VISIT_SUBTREE;
     }
     
@@ -138,36 +127,34 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     
 	@Override
 	public void endVisit(CompilationUnit node) {
-		if (toCheck) {
 			
-			if (phase == 1) {
-				// Leaving "Phase 1" (1st traversal): 
-				//     Get information about class variables.
-				//debug();
-				mainNode.accept(this);;
-				
-			} else if (phase == 2) {
-				// Leaving "Phase 2" (2nd traversal): 
-				//     Check for variables updated inside the loop, 
-				//     and about ALL existing method calls.
-				//debug();
-				mainNode.accept(this);;
-				
-			} else {
-				// Leaving "Phase 3" (3rd traversal): 
-				//     Check if previously located method calls can 
-				//     be passed outside the loop, and do it.
-				//debug();
-				phase = 0;
-				fileName = "";
-				packageName = "";
-				mainNode = null;
-				this.classVars.clear();
-				this.conditionedVars.clear();
-				this.methodCalls.clear();
-			}
+		if (phase == 1) {
+			// Leaving "Phase 1" (1st traversal): 
+			//     Get information about class variables.
+			//debug();
+			mainNode.accept(this);;
+			
+		} else if (phase == 2) {
+			// Leaving "Phase 2" (2nd traversal): 
+			//     Check for variables updated inside the loop, 
+			//     and about ALL existing method calls.
+			//debug();
+			mainNode.accept(this);;
+			
+		} else {
+			// Leaving "Phase 3" (3rd traversal): 
+			//     Check if previously located method calls can 
+			//     be passed outside the loop, and do it.
+			//debug();
+			phase = 0;
+			fileName = "";
+			packageName = "";
+			mainNode = null;
+			this.classVars.clear();
+			this.conditionedVars.clear();
+			this.methodCalls.clear();
 		}
-		
+	
 		super.endVisit(node);
 	}
 	

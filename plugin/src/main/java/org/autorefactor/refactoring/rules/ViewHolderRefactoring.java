@@ -218,7 +218,7 @@ public class ViewHolderRefactoring extends AbstractRefactoringRule {
 					if(!"convertView".equals(visitor.viewVariable.getIdentifier())){
 						Statement assignConvertViewToView = null;
 						if(visitor.viewVariableDeclarationFragment != null){
-							assignConvertViewToView = b.declareStmt(b.type(COEvolgy.typeOf(visitor.viewVariable.getIdentifier(), allVars)), b.simpleName("convertView"), b.copy(visitor.viewVariable));
+							assignConvertViewToView = b.declareStmt(b.type(COEvolgy.typeOf(visitor.viewVariable.getIdentifier(), allVars)), b.copy(visitor.viewVariable), b.simpleName("convertView"));
 						}
 						else if(visitor.viewVariableAssignment != null){
 							assignConvertViewToView = b.getAST().newExpressionStatement(b.assign(b.copy(visitor.viewVariable), Assignment.Operator.ASSIGN, b.simpleName("convertView")));
