@@ -86,8 +86,10 @@ public class TraceMethodsRefactoring extends AbstractRefactoringRule {
 	
 	@Override
     public boolean visit(CompilationUnit node) {
+		List<ImportDeclaration> allImports = node.imports();
 		fileName = node.getJavaElement().getElementName();
 		packageName = node.getPackage().getName().getFullyQualifiedName();
+		foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
 		
 		return VISIT_SUBTREE;
 	}
@@ -101,19 +103,23 @@ public class TraceMethodsRefactoring extends AbstractRefactoringRule {
 	
 	@Override
     public boolean visit(ImportDeclaration node) {
+		final ASTBuilder b = ctx.getASTBuilder();
+		final Refactorings r = ctx.getRefactorings();
+		boolean refactored = false;
+
 		if (operationFlag == TRACE && !foundTracerImport) {
-			final ASTBuilder b = ctx.getASTBuilder();
-			final Refactorings r = ctx.getRefactorings();
 			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
 			Name importName = b.name(tracerImport.split("\\."));
 			importTracer.setName(importName);
 			r.insertBefore(importTracer, node);
 			
 			foundTracerImport = true;
-			return DO_NOT_VISIT_SUBTREE;
+			refactored = true;
 		}
 		
-		return VISIT_SUBTREE;
+		if (refactored) return ASTHelper.DO_NOT_VISIT_SUBTREE;
+		
+		else return ASTHelper.VISIT_SUBTREE;
 	}
 	
 	
@@ -122,7 +128,11 @@ public class TraceMethodsRefactoring extends AbstractRefactoringRule {
 		final ASTBuilder b = this.ctx.getASTBuilder();
 		final Refactorings r = this.ctx.getRefactorings();
 		
-		if (operationFlag == TRACE && this.insideMethod && !this.insertedTraceNode && !(this.fullMethodNames.contains(qualifiedName))) {
+		if (operationFlag == TRACE 
+				&& this.insideMethod 
+				&& !this.insertedTraceNode 
+				&& !(this.fullMethodNames.contains(qualifiedName))
+				&& foundTracerImport) {
 			int insertIndex = 0;
 			if (this.isMethodConstructor || qualifiedName.endsWith("onCreate")) {
 				insertIndex = Math.min(1, node.statements().size());
@@ -130,7 +140,6 @@ public class TraceMethodsRefactoring extends AbstractRefactoringRule {
 			COEvolgy helper = new COEvolgy(this.ctx, false);
 			ASTNode traceMethodNode = helper.buildTraceMethodNode(this.qualifiedName);
 
-			//r.insertFirst(node, Block.STATEMENTS_PROPERTY, traceMethodNode);
 			r.insertAt(node,
 					Block.STATEMENTS_PROPERTY,
 					traceMethodNode,
