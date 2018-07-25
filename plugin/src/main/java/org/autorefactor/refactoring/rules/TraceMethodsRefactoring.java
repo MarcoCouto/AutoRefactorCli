@@ -134,7 +134,7 @@ public class TraceMethodsRefactoring extends AbstractRefactoringRule {
 				&& !(this.fullMethodNames.contains(qualifiedName))
 				&& foundTracerImport) {
 			int insertIndex = 0;
-			if (this.isMethodConstructor || qualifiedName.endsWith("onCreate")) {
+			if (this.isMethodConstructor) {
 				insertIndex = Math.min(1, node.statements().size());
 			}
 			COEvolgy helper = new COEvolgy(this.ctx, false);
