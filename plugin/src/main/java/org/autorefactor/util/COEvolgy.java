@@ -336,7 +336,7 @@ public class COEvolgy {
 		
 		if (this.insideStaticBlock) {
 			Initializer init = r.getAST().newInitializer();
-			Block body = b.block(r.getAST().newExpressionStatement(traceCall));
+			Block body = b.block(traceStmt);
 			init.setBody(body);
 			init.modifiers().add(b.static0());
 			return init;

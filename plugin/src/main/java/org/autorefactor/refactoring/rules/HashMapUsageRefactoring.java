@@ -10,7 +10,7 @@ import org.autorefactor.refactoring.ASTHelper;
 import org.autorefactor.refactoring.Refactorings;
 import org.autorefactor.util.COEvolgy;
 import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
@@ -19,11 +19,11 @@ import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
+import org.eclipse.jdt.core.dom.ParameterizedType;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.Type;
-import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
@@ -31,6 +31,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	public static final String TAG = "HashMapUsage";
+	public static String fileName = "";
 
 	private static boolean foundArrayImport = false;
 	private static boolean foundTracerImport = false;
@@ -76,7 +77,8 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     /* VISITORS */
 
     @Override
-    public boolean visit(CompilationUnit node) {		
+    public boolean visit(CompilationUnit node) {
+    	fileName = node.getJavaElement().getPath().toString();
     	List<ImportDeclaration> allImports = node.imports();
     	foundArrayImport = COEvolgy.isImportIncluded(allImports, arrayMapImport);
     	foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
@@ -107,7 +109,9 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	@Override
 	public boolean visit(ClassInstanceCreation node) {
-		if (node.getType().toString().contains("HashMap")) {
+		String typeStr = node.getType().toString().replace(" ", "");
+		
+		if (typeStr.startsWith("HashMap")) {
 			final ASTBuilder b = this.ctx.getASTBuilder();
 			final Refactorings r = this.ctx.getRefactorings();
 			
@@ -132,6 +136,54 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 			r.replace(node, replacement);
 			
 			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+		} else if (typeStr.contains("<HashMap")	|| typeStr.contains(",HashMap")) {
+			final ASTBuilder b = this.ctx.getASTBuilder();
+			final Refactorings r = this.ctx.getRefactorings();
+			
+			Type newType = b.genericType(typeStr.split("<")[0]);
+
+			ClassInstanceCreation replacement;
+			replacement = b.new0(newType);
+			if (operationFlag == TRACE) {
+				// insert something to trace the patterns execution
+				ASTNode parentStatement = getParentStatement(node);
+				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+			}
+			COEvolgy.traceRefactoring(TAG);
+			r.replace(node, replacement);
+			
+			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+		}
+		
+		return ASTHelper.VISIT_SUBTREE;
+	}
+	
+	@Override
+	public boolean visit(CastExpression node) {
+		String typeStr = node.getType().toString().replace(" ", "");
+		
+		if (node.getType().isParameterizedType()) {
+			ParameterizedType paramType = (ParameterizedType) node.getType();
+			if (typeStr.contains("HashMap")) {
+				final ASTBuilder b = this.ctx.getASTBuilder();
+				final Refactorings r = this.ctx.getRefactorings();
+				
+				Type newType = createGenericTypeCopy(newMapClass, paramType.toString(), b);
+				
+				CastExpression replacement;
+				replacement = b.cast(newType, b.copy(node.getExpression()));
+				if (operationFlag == TRACE) {
+					// insert something to trace the patterns execution
+					ASTNode parentStatement = getParentStatement(node);
+					boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+					r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+				}
+				COEvolgy.traceRefactoring(TAG);
+				r.replace(node, replacement);
+				
+				return ASTHelper.DO_NOT_VISIT_SUBTREE;
+			}
 		}
 		
 		return ASTHelper.VISIT_SUBTREE;
