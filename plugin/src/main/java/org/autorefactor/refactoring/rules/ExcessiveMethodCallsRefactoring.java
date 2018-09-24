@@ -604,6 +604,7 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
 	        				// insert something to trace the patterns execution
 	                		insertTraceNode(b, r, node);
 	        			}
+	                	COEvolgy.traceRefactoring(TAG);
 	                	r.replace(node, b.simpleName(helperVar));
 	                	
 	                	return ASTHelper.DO_NOT_VISIT_SUBTREE;
