@@ -508,8 +508,10 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
 		public boolean visit(PrefixExpression node) {
 			if (this.insideLoop > 0) {
 				Expression exp = node.getOperand();
-				String varName = getVarFromExpression((SimpleName) exp);
-				this.addConditionedVar(varName);
+				if (exp.getNodeType() == ASTNode.SIMPLE_NAME) {
+					String varName = getVarFromExpression((SimpleName) exp);
+					this.addConditionedVar(varName);
+				}
 			}
 			return super.visit(node);
 		}
