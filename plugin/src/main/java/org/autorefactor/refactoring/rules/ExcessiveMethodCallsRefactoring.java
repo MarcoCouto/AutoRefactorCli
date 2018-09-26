@@ -569,7 +569,13 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
         private List<String> argNames(List arguments) {
         	List<String> methodArgs = new ArrayList<>();
         	for (Object o : arguments) {
-        		String qualifiedName = getVarFromExpression((Expression) o);
+        		Expression expArg = (Expression) o;
+        		String qualifiedName = getVarFromExpression(expArg);
+        		if (expArg.getNodeType() == ASTNode.METHOD_INVOCATION) {
+        			MethodInvocation subCall = (MethodInvocation) expArg;
+        			List<String> subArgs = argNames(subCall.arguments());
+        			methodArgs.addAll(subArgs);
+        		}
         		if (qualifiedName.contains(";")) {
         			String[] nameSplit = qualifiedName.split(";");
         			for (String s : nameSplit) methodArgs.add(s);
