@@ -281,7 +281,8 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
         return "["+location+"]" + node.getName().getFullyQualifiedName();
     }
 	
-    private void debug() {		
+    private void debug() {
+    	if (fileName.equals("AddEnvironment.java")) {
 		System.out.println("\t:: VARS ::");
 		for (String v : this.classVars) {
 			System.out.println("\t\t> " + v);
@@ -307,6 +308,7 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
             }
         }
         System.out.println("\n");
+    	}
     }
 	
 	
@@ -566,15 +568,20 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
             return false;
         }
         
+        private List<String> argNames(MethodInvocation call) {
+        	List<String> methodArgs = new ArrayList<>();
+        	methodArgs.addAll(argNames(call.arguments()));
+        	
+        	return methodArgs;
+        }
+        
         private List<String> argNames(List arguments) {
         	List<String> methodArgs = new ArrayList<>();
         	for (Object o : arguments) {
         		Expression expArg = (Expression) o;
         		String qualifiedName = getVarFromExpression(expArg);
         		if (expArg.getNodeType() == ASTNode.METHOD_INVOCATION) {
-        			MethodInvocation subCall = (MethodInvocation) expArg;
-        			List<String> subArgs = argNames(subCall.arguments());
-        			methodArgs.addAll(subArgs);
+        			methodArgs.addAll(argNames((MethodInvocation) expArg));
         		}
         		if (qualifiedName.contains(";")) {
         			String[] nameSplit = qualifiedName.split(";");
@@ -601,9 +608,12 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
                 // if the call variable is not conditioned, it can be passed out the loop (issue found).
                 Set<String> vars = conditionedVars.get(visitingMethod);
                 List<String> args = argNames(node.arguments());
+                if (node.getExpression().getNodeType() == ASTNode.METHOD_INVOCATION) {
+                	args.addAll(argNames((MethodInvocation) node.getExpression()));
+                }
 
                 if ((vars != null) && (!vars.contains(name)) && (!argsConditioned(args))) {
-                	if (this.typeName != "null" && this.typeName != "") {
+                	if (!(this.typeName.equals("null")) && !(this.typeName.equals(""))) {
 	                	count++;
 	                	String helperVar = "_coev__var_" + count;
 	                	VariableDeclarationStatement newVar = b.declareStmt(b.type(this.typeName), b.simpleName(helperVar), b.copy(node));
@@ -738,7 +748,6 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
                 block.accept(this);
                 r.replace(s, block);
     		}
-    		COEvolgy.traceRefactoring(TAG);
     		
 			r.insertAfter(traceNode(false), parent);
 		}

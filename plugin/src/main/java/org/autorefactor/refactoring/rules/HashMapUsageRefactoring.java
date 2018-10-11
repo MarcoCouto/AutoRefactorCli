@@ -3,6 +3,8 @@ package org.autorefactor.refactoring.rules;
 import static org.autorefactor.util.COEvolgy.MEASURE;
 import static org.autorefactor.util.COEvolgy.TRACE;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.autorefactor.refactoring.ASTBuilder;
@@ -10,16 +12,20 @@ import org.autorefactor.refactoring.ASTHelper;
 import org.autorefactor.refactoring.Refactorings;
 import org.autorefactor.util.COEvolgy;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.ParameterizedType;
+import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
@@ -32,7 +38,9 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	public static final String TAG = "HashMapUsage";
 	public static String fileName = "";
-
+	
+	private HashMap<String, String> instances;
+	private List<String> integers;
 	private static boolean foundArrayImport = false;
 	private static boolean foundTracerImport = false;
 	private static final String newMapClass = "ArrayMap";
@@ -42,11 +50,15 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	
 	public HashMapUsageRefactoring() {
 		super();
+		instances = new HashMap<>();
+		integers = new ArrayList<>();
 	}
 	
 	public HashMapUsageRefactoring(int flag) {
 		super();
 		operationFlag = flag;
+		instances = new HashMap<>();
+		integers = new ArrayList<>();
 	}
 	
 	@Override
@@ -75,6 +87,280 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     }
     
     /* VISITORS */
+    
+    public class UsageVisitor extends ASTVisitor {
+    	
+    	public boolean transformedCode;
+    	private String currentVar;
+    	
+    	public UsageVisitor() {
+    		transformedCode = false;
+    		currentVar = "";
+    	}
+    	
+    	@Override
+    	public boolean visit(FieldDeclaration node) {
+    		String nodeType = node.getType().toString();
+    		if (nodeType.contains("HashMap")) {
+    			System.out.println("\t#"+fileName+"# Field Declaration");
+    			transformedCode = true;
+    			for (Object f : node.fragments()) {
+    				currentVar = ((VariableDeclarationFragment) f).getName().getIdentifier();
+    			}
+    			return setDeclaration(node);
+    		} else if (nodeType.equals("int") || nodeType.equals("Integer")) {
+    			for (Object f : node.fragments()) {
+    				VariableDeclarationFragment frag = (VariableDeclarationFragment) f; 
+    				integers.add(frag.getName().getIdentifier());
+    			}
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+
+    	@Override
+    	public boolean visit(VariableDeclarationStatement node) {
+    		String nodeType = node.getType().toString();
+    		if (nodeType.contains("HashMap")) {
+    			System.out.println("\t#"+fileName+"# Var Decl Stmnt");
+    			transformedCode = true;
+    			for (Object f : node.fragments()) {
+    				currentVar = ((VariableDeclarationFragment) f).getName().getIdentifier();
+    			}
+    			return setDeclaration(node);
+    		} else if (nodeType.equals("int") || nodeType.equals("Integer")) {
+    			for (Object f : node.fragments()) {
+    				VariableDeclarationFragment frag = (VariableDeclarationFragment) f; 
+    				integers.add(frag.getName().getIdentifier());
+    			}
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    	@Override
+    	public boolean visit(Assignment node) {
+    		Expression left = node.getLeftHandSide();
+    		Expression right = node.getLeftHandSide();
+    		
+    		if (right.getNodeType() == ASTNode.METHOD_INVOCATION) {
+    			String varName = "";
+    			
+    			switch (left.getNodeType()) {
+    			
+    				case ASTNode.FIELD_ACCESS:
+    					varName = ((FieldAccess) left).getName().getIdentifier();
+    					currentVar = varName;
+    					break;
+    					
+    				case ASTNode.QUALIFIED_NAME:
+    					varName = ((QualifiedName) left).getName().getIdentifier();
+    					currentVar = varName;
+    					break;
+    					
+    				case ASTNode.SIMPLE_NAME:
+    					varName = ((SimpleName) left).getIdentifier();
+    					currentVar = varName;
+    					break;
+    					
+    				default:
+    					break;
+    					
+    			}
+    			if (instances.containsKey(varName)) {
+    				final ASTBuilder b = ctx.getASTBuilder();
+        			final Refactorings r = ctx.getRefactorings();
+        			
+        			Type castType = createGenericTypeCopy(newMapClass, instances.get(varName), b);
+        			Expression newRight = b.cast(castType, b.copy(right));
+        			r.replace(right, newRight);
+        			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    			}
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    	@Override
+    	public boolean visit(ClassInstanceCreation node) {
+    		String typeStr = node.getType().toString().replace(" ", "");
+    		
+    		if (typeStr.startsWith("HashMap")) {
+    			final ASTBuilder b = ctx.getASTBuilder();
+    			final Refactorings r = ctx.getRefactorings();
+    			
+    			Type newType = b.genericType(newMapClass);
+    			
+    			Expression[] args = new Expression[node.arguments().size()];
+    			int i = 0;
+    			for (Object a : node.arguments()) {
+    				Expression exp = (Expression) a;
+    				String argStr = exp.toString();
+    				if (integers.contains(argStr) || (exp.getNodeType() == ASTNode.NUMBER_LITERAL)) {
+    					args[i] = b.copy(exp);
+    				} else {
+    					// This particular argument's type is a Map instance, 
+    					// so we need to cast it
+    					String castTypeStr = instances.get(currentVar);
+    					if (castTypeStr == null) {
+    						Type castType = createGenericTypeCopy(newMapClass, typeStr, b);
+    						args[i] = b.cast(castType, b.copy(exp));
+    					} else {
+    						Type castType = createGenericTypeCopy(newMapClass, castTypeStr, b);
+    						args[i] = b.cast(castType, b.copy(exp));
+    					}
+    				}
+    				i++;
+    			}
+
+    			ClassInstanceCreation replacement;
+    			replacement = b.new0(newType, args);
+    			if (operationFlag == TRACE) {
+    				// insert something to trace the patterns execution
+    				ASTNode parentStatement = getParentStatement(node);
+    				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+    				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+    			}
+    			System.out.println("\t#"+fileName+"# Field Declaration");
+    			transformedCode = true;
+    			COEvolgy.traceRefactoring(TAG);
+    			r.replace(node, replacement);
+    			
+    			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    		} else if (typeStr.contains("<HashMap")	|| typeStr.contains(",HashMap")) {
+    			final ASTBuilder b = ctx.getASTBuilder();
+    			final Refactorings r = ctx.getRefactorings();
+    			
+    			Type newType = b.genericType(typeStr.split("<")[0]);
+
+    			ClassInstanceCreation replacement;
+    			replacement = b.new0(newType);
+    			if (operationFlag == TRACE) {
+    				// insert something to trace the patterns execution
+    				ASTNode parentStatement = getParentStatement(node);
+    				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+    				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+    			}
+    			System.out.println("\t#"+fileName+"# Field Declaration");
+    			transformedCode = true;
+    			COEvolgy.traceRefactoring(TAG);
+    			r.replace(node, replacement);
+    			
+    			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    	@Override
+    	public boolean visit(CastExpression node) {
+    		String typeStr = node.getType().toString().replace(" ", "");
+    		
+    		if (node.getType().isParameterizedType()) {
+    			ParameterizedType paramType = (ParameterizedType) node.getType();
+    			if (typeStr.contains("HashMap")) {
+    				final ASTBuilder b = ctx.getASTBuilder();
+    				final Refactorings r = ctx.getRefactorings();
+    				
+    				Type newType = createGenericTypeCopy(newMapClass, paramType.toString(), b);
+    				
+    				CastExpression replacement;
+    				replacement = b.cast(newType, b.copy(node.getExpression()));
+    				if (operationFlag == TRACE) {
+    					// insert something to trace the patterns execution
+    					ASTNode parentStatement = getParentStatement(node);
+    					boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+    					r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+    				}
+    				System.out.println("\t#"+fileName+"# Field Declaration");
+    				transformedCode = true;
+    				COEvolgy.traceRefactoring(TAG);
+    				r.replace(node, replacement);
+    				
+    				return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    			}
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    	
+    	@Override
+    	public boolean visit(MethodDeclaration node) {
+    		Type returnType = node.getReturnType2();
+    		if (returnType != null) {
+    			String returnTypeStr = returnType.toString();
+    			if (returnTypeStr.contains("HashMap")) {
+    				final ASTBuilder b = ctx.getASTBuilder();
+			        final Refactorings r = ctx.getRefactorings();
+			        
+					Type newType = createGenericTypeCopy(newMapClass, returnTypeStr, b);
+					
+					System.out.println("\t#"+fileName+"# Method Decl");
+					r.replace(returnType, newType);
+					return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    			}
+    		}
+    		
+    		return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    	@Override
+    	public boolean visit(SingleVariableDeclaration node) {
+    		
+    		if (node.getType().toString().contains("HashMap")) {
+    			final ASTBuilder b = ctx.getASTBuilder();
+    	        final Refactorings r = ctx.getRefactorings();
+    	        
+    			Type newType = createGenericTypeCopy(newMapClass, node.getType().toString(), b);
+    			String varName = node.getName().getIdentifier();
+    			SingleVariableDeclaration newArg = b.declareSingleVariable(varName, newType);
+    			
+    			r.replace(node, newArg);
+    			System.out.println("\t#"+fileName+"# Single Var Decl");
+    			transformedCode = true;
+    			return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    		}
+    		
+        	return ASTHelper.VISIT_SUBTREE;
+    	}
+    }
+    
+
+	public class ImportVisitor extends ASTVisitor {
+    	
+    	@Override
+    	public boolean visit(ImportDeclaration node) {
+    		final ASTBuilder b = ctx.getASTBuilder();
+    		final Refactorings r = ctx.getRefactorings();
+    		boolean refactored = false;
+    		if (!foundArrayImport) {
+    			ImportDeclaration newImport = r.getAST().newImportDeclaration();
+    			Name name = b.name(arrayMapImport.split("\\."));
+    			newImport.setName(name);
+    			r.insertBefore(newImport, node);
+    			
+    			foundArrayImport = true;
+    			refactored = true;
+    		}
+    		
+    		if (operationFlag == TRACE && !foundTracerImport) {
+    			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
+    			Name importName = b.name(tracerImport.split("\\."));
+    			importTracer.setName(importName);
+    			r.insertBefore(importTracer, node);
+    			
+    			foundTracerImport = true;
+    			refactored = true;
+    		}
+    		
+    		if (refactored) return ASTHelper.DO_NOT_VISIT_SUBTREE;
+    		
+    		else return ASTHelper.VISIT_SUBTREE;
+    	}
+    	
+    }
 
     @Override
     public boolean visit(CompilationUnit node) {
@@ -82,166 +368,20 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     	List<ImportDeclaration> allImports = node.imports();
     	foundArrayImport = COEvolgy.isImportIncluded(allImports, arrayMapImport);
     	foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
-		
-	
+    	instances = new HashMap<>();
+    	integers = new ArrayList<>();
+    	
+		UsageVisitor visitor = new UsageVisitor();
+    	
+    	node.accept(visitor);
+    	if (visitor.transformedCode) {
+    		ImportVisitor impVisitor = new ImportVisitor();
+    		node.accept(impVisitor);
+    	}
     	return ASTHelper.VISIT_SUBTREE;
     }
     
-
-	@Override
-	public boolean visit(FieldDeclaration node) {
-		if (node.getType().toString().contains("HashMap")) {
-			return setDeclaration(node);
-		}
-		
-		return ASTHelper.VISIT_SUBTREE;
-	}
-	
-
-	@Override
-	public boolean visit(VariableDeclarationStatement node) {
-		if (node.getType().toString().contains("HashMap")) {
-			return setDeclaration(node);
-		}
-		
-		return ASTHelper.VISIT_SUBTREE;
-	}
-	
-	@Override
-	public boolean visit(ClassInstanceCreation node) {
-		String typeStr = node.getType().toString().replace(" ", "");
-		
-		if (typeStr.startsWith("HashMap")) {
-			final ASTBuilder b = this.ctx.getASTBuilder();
-			final Refactorings r = this.ctx.getRefactorings();
-			
-			Type newType = b.genericType(newMapClass);
-			
-			Expression[] args = new Expression[node.arguments().size()];
-			int i = 0;
-			for (Object a : node.arguments()) {
-				args[i] = b.copy((Expression) a);
-				i++;
-			}
-
-			ClassInstanceCreation replacement;
-			replacement = b.new0(newType, args);
-			if (operationFlag == TRACE) {
-				// insert something to trace the patterns execution
-				ASTNode parentStatement = getParentStatement(node);
-				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
-				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
-			}
-			COEvolgy.traceRefactoring(TAG);
-			r.replace(node, replacement);
-			
-			return ASTHelper.DO_NOT_VISIT_SUBTREE;
-		} else if (typeStr.contains("<HashMap")	|| typeStr.contains(",HashMap")) {
-			final ASTBuilder b = this.ctx.getASTBuilder();
-			final Refactorings r = this.ctx.getRefactorings();
-			
-			Type newType = b.genericType(typeStr.split("<")[0]);
-
-			ClassInstanceCreation replacement;
-			replacement = b.new0(newType);
-			if (operationFlag == TRACE) {
-				// insert something to trace the patterns execution
-				ASTNode parentStatement = getParentStatement(node);
-				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
-				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
-			}
-			COEvolgy.traceRefactoring(TAG);
-			r.replace(node, replacement);
-			
-			return ASTHelper.DO_NOT_VISIT_SUBTREE;
-		}
-		
-		return ASTHelper.VISIT_SUBTREE;
-	}
-	
-	@Override
-	public boolean visit(CastExpression node) {
-		String typeStr = node.getType().toString().replace(" ", "");
-		
-		if (node.getType().isParameterizedType()) {
-			ParameterizedType paramType = (ParameterizedType) node.getType();
-			if (typeStr.contains("HashMap")) {
-				final ASTBuilder b = this.ctx.getASTBuilder();
-				final Refactorings r = this.ctx.getRefactorings();
-				
-				Type newType = createGenericTypeCopy(newMapClass, paramType.toString(), b);
-				
-				CastExpression replacement;
-				replacement = b.cast(newType, b.copy(node.getExpression()));
-				if (operationFlag == TRACE) {
-					// insert something to trace the patterns execution
-					ASTNode parentStatement = getParentStatement(node);
-					boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
-					r.insertAfter(traceNode(insideFieldDecl), parentStatement);
-				}
-				COEvolgy.traceRefactoring(TAG);
-				r.replace(node, replacement);
-				
-				return ASTHelper.DO_NOT_VISIT_SUBTREE;
-			}
-		}
-		
-		return ASTHelper.VISIT_SUBTREE;
-	}
-	
-	@Override
-	public boolean visit(ImportDeclaration node) {
-		final ASTBuilder b = this.ctx.getASTBuilder();
-		final Refactorings r = this.ctx.getRefactorings();
-		boolean refactored = false;
-		if (!foundArrayImport) {
-			ImportDeclaration newImport = r.getAST().newImportDeclaration();
-			Name name = b.name(arrayMapImport.split("\\."));
-			newImport.setName(name);
-			r.insertBefore(newImport, node);
-			
-			foundArrayImport = true;
-			refactored = true;
-		}
-		
-		if (operationFlag == TRACE && !foundTracerImport) {
-			ImportDeclaration importTracer = r.getAST().newImportDeclaration();
-			Name importName = b.name(tracerImport.split("\\."));
-			importTracer.setName(importName);
-			r.insertBefore(importTracer, node);
-			
-			foundTracerImport = true;
-			refactored = true;
-		}
-		
-		if (refactored) return ASTHelper.DO_NOT_VISIT_SUBTREE;
-		
-		else return ASTHelper.VISIT_SUBTREE;
-	}
-	
-	
-	@Override
-	public boolean visit(MethodDeclaration node) {
-		for (Object o : node.parameters()) {
-			ASTNode arg = (ASTNode) o;
-			if (arg.getNodeType() == ASTNode.SINGLE_VARIABLE_DECLARATION) {
-				SingleVariableDeclaration argVar = (SingleVariableDeclaration) arg;
-				if (argVar.getType().toString().contains("HashMap")) {
-					final ASTBuilder b = this.ctx.getASTBuilder();
-			        final Refactorings r = this.ctx.getRefactorings();
-			        
-					Type newType = createGenericTypeCopy(newMapClass, argVar.getType().toString(), b);
-					String varName = argVar.getName().getIdentifier();
-					SingleVariableDeclaration newArg = b.declareSingleVariable(varName, newType);
-					
-					r.replace(argVar, newArg);
-				}
-			}
-		}
-		
-		return ASTHelper.VISIT_SUBTREE;
-	}
-	
+    
 	/* AUXILIAR METHODS */
 
 	private Type createGenericTypeCopy(String arrayMapTypeName, String type, ASTBuilder b) {
@@ -299,7 +439,10 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 		
 		for (Object o : node.fragments()) {
 			((ASTNode) o).accept(this);
-			FieldDeclaration newNode = b.declareField(newType, b.copy((VariableDeclarationFragment) o));
+			VariableDeclarationFragment frag = (VariableDeclarationFragment) o;
+			instances.put(frag.getName().getIdentifier(), node.getType().toString());
+			
+			FieldDeclaration newNode = b.declareField(newType, b.copy(frag));
 			List<Modifier> listMod = node.modifiers();
 			List<Modifier> newListMod = newNode.modifiers();
 
@@ -322,8 +465,12 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 			if (o instanceof VariableDeclarationFragment) {
 				VariableDeclarationFragment fragment = (VariableDeclarationFragment) o;
 				fragment.accept(this);
+				instances.put(fragment.getName().getIdentifier(), node.getType().toString());
 				SimpleName varName = b.copy(fragment.getName());
 				Expression init = fragment.getInitializer() == null ? null : b.copy(fragment.getInitializer());
+				if (fragment.getInitializer().getNodeType() == ASTNode.METHOD_INVOCATION) {
+					init = b.cast(createGenericTypeCopy(newMapClass, node.getType().toString(), b), init);
+				}
 				
 				VariableDeclarationStatement newNode = b.declareStmt(newType, varName, init);
 				List<Modifier> listMod = node.modifiers();
