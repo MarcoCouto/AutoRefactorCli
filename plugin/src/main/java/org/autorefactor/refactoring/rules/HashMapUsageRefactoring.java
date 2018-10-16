@@ -102,7 +102,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     	public boolean visit(FieldDeclaration node) {
     		String nodeType = node.getType().toString();
     		if (nodeType.contains("HashMap")) {
-    			System.out.println("\t#"+fileName+"# Field Declaration");
     			transformedCode = true;
     			for (Object f : node.fragments()) {
     				currentVar = ((VariableDeclarationFragment) f).getName().getIdentifier();
@@ -123,7 +122,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     	public boolean visit(VariableDeclarationStatement node) {
     		String nodeType = node.getType().toString();
     		if (nodeType.contains("HashMap")) {
-    			System.out.println("\t#"+fileName+"# Var Decl Stmnt");
     			transformedCode = true;
     			for (Object f : node.fragments()) {
     				currentVar = ((VariableDeclarationFragment) f).getName().getIdentifier();
@@ -222,7 +220,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
     				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
     			}
-    			System.out.println("\t#"+fileName+"# Field Declaration");
     			transformedCode = true;
     			COEvolgy.traceRefactoring(TAG);
     			r.replace(node, replacement);
@@ -242,7 +239,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
     				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
     			}
-    			System.out.println("\t#"+fileName+"# Field Declaration");
     			transformedCode = true;
     			COEvolgy.traceRefactoring(TAG);
     			r.replace(node, replacement);
@@ -273,7 +269,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     					boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
     					r.insertAfter(traceNode(insideFieldDecl), parentStatement);
     				}
-    				System.out.println("\t#"+fileName+"# Field Declaration");
     				transformedCode = true;
     				COEvolgy.traceRefactoring(TAG);
     				r.replace(node, replacement);
@@ -297,7 +292,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 			        
 					Type newType = createGenericTypeCopy(newMapClass, returnTypeStr, b);
 					
-					System.out.println("\t#"+fileName+"# Method Decl");
 					r.replace(returnType, newType);
 					return ASTHelper.DO_NOT_VISIT_SUBTREE;
     			}
@@ -318,7 +312,6 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     			SingleVariableDeclaration newArg = b.declareSingleVariable(varName, newType);
     			
     			r.replace(node, newArg);
-    			System.out.println("\t#"+fileName+"# Single Var Decl");
     			transformedCode = true;
     			return ASTHelper.DO_NOT_VISIT_SUBTREE;
     		}
