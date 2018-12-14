@@ -172,6 +172,13 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
         			
         			Type castType = createGenericTypeCopy(newMapClass, instances.get(varName), b);
         			Expression newRight = b.cast(castType, b.copy(right));
+        			if (operationFlag == TRACE) {
+        				// insert something to trace the patterns execution
+        				ASTNode parentStatement = getParentStatement(node);
+        				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+        				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+        			}
+        			COEvolgy.traceRefactoring(TAG);
         			r.replace(right, newRight);
         			return ASTHelper.DO_NOT_VISIT_SUBTREE;
     			}

@@ -178,7 +178,8 @@ public final class AllRefactoringRules {
                 new DrawAllocationRefactoring(COEvolgy.loadOperationFlag()),
                 new HashMapUsageRefactoring(COEvolgy.loadOperationFlag()),
                 new ExcessiveMethodCallsRefactoring(COEvolgy.loadOperationFlag()),
-                new TraceMethodsRefactoring(COEvolgy.loadOperationFlag())
+                new TraceMethodsRefactoring(COEvolgy.loadOperationFlag()),
+                new MemoizationChanceRefactoring(COEvolgy.loadOperationFlag())
                 );
     }
 

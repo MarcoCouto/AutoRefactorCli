@@ -19,19 +19,23 @@ import org.autorefactor.refactoring.rules.RefactoringContext;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.IfStatement;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.InfixExpression;
+import org.eclipse.jdt.core.dom.InfixExpression.Operator;
 import org.eclipse.jdt.core.dom.Initializer;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
+import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
@@ -43,6 +47,39 @@ import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.internal.corext.dom.ASTNodes;
 
 public class COEvolgy {
+	
+	public static final List<String> nativeTypes = Arrays.asList(
+			"boolean",
+	        "int",
+	        "short",
+	        "long",
+	        "float",
+	        "double",
+	        "byte",
+	        "char",
+	        "java.lang.Boolean",
+	        "java.lang.Integer",
+	        "java.lang.Short",
+	        "java.lang.Long",
+	        "java.lang.Float",
+	        "java.lang.Double",
+	        "java.lang.Byte",
+	        "java.lang.Character",
+	        "java.lang.String"
+			);
+	
+	public static final Map<String, String> nativeToWrapper;
+	static {
+		nativeToWrapper = new HashMap<>();
+		nativeToWrapper.put("boolean", "Boolean");
+		nativeToWrapper.put("int", "Integer");
+		nativeToWrapper.put("short", "Short");
+		nativeToWrapper.put("long", "Long");
+		nativeToWrapper.put("float", "Float");
+		nativeToWrapper.put("double", "Double");
+		nativeToWrapper.put("byte", "Byte");
+		nativeToWrapper.put("char", "Character");
+	}
 	
 	public static final List<String> allJavaCollections = Arrays.asList(
 			"LinkedHashSet", 
@@ -313,7 +350,7 @@ public class COEvolgy {
 	
 	public static final int MEASURE = 1000;
 	public static final int TRACE = 2000;
-	private static final String traceRefactoringFile = "refactorings.trace"; // "refactorings.cev"
+	private static final String traceRefactoringFile = "refactorings.trace"; // || "refactorings.cev"
 	private static final boolean useBindings = false;
 	
 	private RefactoringContext ctx;
@@ -347,6 +384,167 @@ public class COEvolgy {
 		
 	}
 	
+	public ExpressionStatement buildMemoizationStatement(String methodName, Expression returnVal, boolean genericApproach, String... params) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Expression callVar = null;
+		String callName = "";
+		MethodInvocation memoizationCall = null;
+		Expression returnValArg = b.copy(returnVal);
+		Expression[] callArgs = null;
+		
+		if (genericApproach) {
+			callVar = b.simpleName("Memoizer");
+			callName = "memoization";
+			
+			int n = params.length + 2;
+			Expression methodNameArg = b.string(methodName);
+			callArgs = new Expression[n];
+			callArgs[0] = methodNameArg;
+			callArgs[1] = returnValArg;
+			
+			for (int i = 2; i < n; i++) callArgs[i] = b.simpleName(params[i-2]);
+			
+			memoizationCall = b.invoke(callVar, callName, callArgs);
+			
+		} else {
+			callVar = b.simpleName("_memo_" + methodName);
+			callName = "put";
+			
+			int n = params.length;
+			callArgs = new Expression[2];
+			Expression[] genKeyArgs = new Expression[n];
+			
+			for (int i = 0; i < n; i++) genKeyArgs[i] = b.simpleName(params[i]);
+			
+			Expression keyArgument = b.invoke(b.simpleName("Memoizer"), "genKey", genKeyArgs);
+			callArgs[0] = keyArgument;
+			callArgs[1] = returnValArg;
+		}
+		
+		memoizationCall = b.invoke(callVar, callName, callArgs);
+		ExpressionStatement memoizationStmt = b.getAST().newExpressionStatement(memoizationCall);
+		
+		return memoizationStmt;
+		
+	}
+	
+	private MethodInvocation buildGetMemoizedValueCall(String methodName, boolean genericApproach, String... params) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Expression callVar = null;
+		String callName = "";
+		MethodInvocation storedValueCall = null;
+		Expression[] callArgs = null;
+		
+		if (genericApproach) {
+			callVar = b.simpleName("Memoizer");
+			callName = "getStoredValue";
+			
+			int n = params.length + 1;
+			Expression methodNameArg = b.string(methodName);
+			callArgs = new Expression[n];
+			callArgs[0] = methodNameArg;
+			
+			for (int i = 1; i < n; i++) {
+				callArgs[i] = b.simpleName(params[i-1]);
+			}
+			
+			storedValueCall = b.invoke(callVar, callName, callArgs);
+		} else {
+			callVar = b.simpleName("_memo_" + methodName);
+			callName = "get";
+			callArgs = new Expression[params.length];
+			
+			for (int i = 0; i < params.length; i++) {
+				callArgs[i] = b.simpleName(params[i]);
+			}
+			Expression keyArgument = b.invoke(b.simpleName("Memoizer"), "genKey", callArgs);
+			
+			storedValueCall = b.invoke(callVar, callName, keyArgument);
+		}
+		
+		
+		//ExpressionStatement storedValueStmt = b.getAST().newExpressionStatement(storedValueCall);
+		
+		return storedValueCall;
+		
+	}
+	
+	public IfStatement buildMemoizationCheck(String methodName, String returnType, boolean genericApproach, String... params) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Operator op = InfixExpression.Operator.NOT_EQUALS;
+		
+		Expression condition = null;
+		Expression returnExp = null;
+		
+		if (genericApproach) {
+			condition = b.infixExpr(b.simpleName("_coev_storedVal"), op, b.null0());
+			Type castType = null;
+			if (nativeToWrapper.keySet().contains(returnType)) {
+				castType = b.type(nativeToWrapper.get(returnType));
+			} else {
+				castType = b.type(returnType);
+			}
+			returnExp = b.cast(castType, b.simpleName("_coev_storedVal"));
+		} else {
+			Expression[] callArgs = new Expression[params.length];
+			
+			for (int i = 0; i < params.length; i++) {
+				callArgs[i] = b.simpleName(params[i]);
+			}
+			Expression keyArgument = b.invoke(b.simpleName("Memoizer"), "genKey", callArgs);
+			
+			condition = b.invoke(b.simpleName("_memo_" + methodName), "containsKey", keyArgument);
+			returnExp = b.invoke(b.simpleName("_memo_" + methodName), "get", b.copy(keyArgument));
+		}
+		
+		ReturnStatement thenStatement = b.return0(returnExp);
+		IfStatement memoizationCheck = b.if0(condition, thenStatement);
+		
+		return memoizationCheck;
+	}
+	
+	public VariableDeclarationStatement buildGetStoredValueVar(String methodName, String returnType, boolean genericApproach, String... params) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Type varType = null;
+		if (genericApproach) {
+			varType = b.type("Object");
+		} else {
+			varType = b.type(returnType);
+		}
+		Expression storedValueCall = buildGetMemoizedValueCall(methodName, genericApproach, params);
+		
+		VariableDeclarationStatement var = b.declareStmt(varType, b.simpleName("_coev_storedVal"), storedValueCall);
+		
+		return var;
+	}
+	
+	public FieldDeclaration declareLookupTable(String name, String returnType) {
+		final ASTBuilder b = this.ctx.getASTBuilder();
+		final Refactorings r = this.ctx.getRefactorings();
+		
+		Type tableType = null;
+		if (nativeToWrapper.keySet().contains(returnType)) {
+			tableType = b.genericType("Hashtable", b.type("String"), b.type(nativeToWrapper.get(returnType)));
+		} else {
+			tableType = b.genericType("Hashtable", b.type("String"), b.type(returnType));
+		}
+		
+		VariableDeclarationFragment fragment = b.declareFragment(b.simpleName("_memo_" + name), b.new0(tableType));
+		FieldDeclaration field = b.declareField(b.copy(tableType), fragment);
+		field.modifiers().add(b.public0());
+		field.modifiers().add(b.static0());
+		
+		return field;
+	}
+	
 	public ASTNode buildTraceMethodNode(String qualifiedName) {
 		final ASTBuilder b = this.ctx.getASTBuilder();
 		final Refactorings r = this.ctx.getRefactorings();
@@ -369,6 +567,23 @@ public class COEvolgy {
 		
 	}
 	
+	public static String getParentMethodName(ASTNode elem, String packageName, String filename) {
+        MethodDeclaration method = getParentMethod(elem);
+        if (method == null) return "";
+
+        return  packageName + "." + filename + "." + method.getName();
+    }
+	
+	public static MethodDeclaration getParentMethod(ASTNode node) {
+		if (node == null) return null;
+		
+		if (node instanceof MethodDeclaration) {
+			return ((MethodDeclaration) node);
+		} else {
+			return getParentMethod(node.getParent());
+		}
+		
+	}
 	
 	public static ASTNode getParentStatement(ASTNode node) {
 		
@@ -516,6 +731,15 @@ public class COEvolgy {
 		}
 		return false;
 	}
+	
+	
+	public static boolean isTypeNative(Type type) {
+    	if (type.resolveBinding() != null) {
+    		return nativeTypes.contains(type.resolveBinding().getQualifiedName());
+    	}
+    	
+        return false;
+    }
 	
 	
 	/**
@@ -818,7 +1042,6 @@ public class COEvolgy {
 			
 		}
 	}
-
 
 
 }
