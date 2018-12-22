@@ -19,7 +19,6 @@ import org.autorefactor.refactoring.rules.RefactoringContext;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.Block;
-import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
@@ -599,7 +598,6 @@ public class COEvolgy {
 			return getParentStatement(node.getParent());
 		}
 	}
-	
 	
 	public static Type copyType(Type type, ASTBuilder b) {
 		if (type.isParameterizedType()) {

@@ -16,6 +16,7 @@ import org.autorefactor.util.COEvolgy;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
@@ -390,6 +391,17 @@ public class MemoizationChanceRefactoring extends AbstractRefactoringRule {
 			this.className = filename;
 		}
 		
+		private ASTNode getParentTypeOrInstanceCreation(ASTNode node) {
+			
+			if (node == null) return null;
+			
+			if (node instanceof TypeDeclaration) return node;
+			
+			if (node instanceof ClassInstanceCreation) return node;
+			
+			return getParentTypeOrInstanceCreation(node.getParent());
+		}
+		
 		private boolean refactorMethod(MethodDeclaration node, String name) {
 			final ASTBuilder b = ctx.getASTBuilder();
 			final Refactorings r = ctx.getRefactorings();
@@ -432,7 +444,19 @@ public class MemoizationChanceRefactoring extends AbstractRefactoringRule {
 			
 			if (!genericApproach) {
 				FieldDeclaration classVar = helper.declareLookupTable(name, returnType);
-				r.insertBefore(classVar, node);
+				ASTNode parent = getParentTypeOrInstanceCreation(node);
+				
+				ASTNode ref = null;
+				if (parent == null) {
+					ref = node;
+					System.out.println("\t\tNull parent: " + name);
+				} else if (parent instanceof TypeDeclaration) {
+					ref = node;
+				} else {
+					ref = COEvolgy.getParentStatement(parent);
+				}
+				
+				r.insertBefore(classVar, ref);
 			} else {
 				VariableDeclarationStatement storedValue = helper.buildGetStoredValueVar(name, returnType, genericApproach, params);
 				r.insertAt(node.getBody(),
@@ -560,7 +584,7 @@ public class MemoizationChanceRefactoring extends AbstractRefactoringRule {
 				refactored = true;
 			}
 			
-			if (!foundMapImport) {
+			if (!foundMapImport && hasMemoizableMethods()) {
 				ImportDeclaration mapImportStmt = r.getAST().newImportDeclaration();
 				Name mapImportName = b.name(mapImport.split("\\."));
 				mapImportStmt.setName(mapImportName);
