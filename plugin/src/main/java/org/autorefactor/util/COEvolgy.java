@@ -32,6 +32,7 @@ import org.eclipse.jdt.core.dom.InfixExpression.Operator;
 import org.eclipse.jdt.core.dom.Initializer;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.ReturnStatement;
@@ -263,7 +264,9 @@ public class COEvolgy {
 																	 "android.app.LauncherActivity", 
 																	 "android.preference.PreferenceActivity", 
 																	 "android.app.NativeActivity", 
-																	 "android.app|android.support.v4.app.FragmentActivity", 
+																	 "android.app.FragmentActivity", 
+																	 "android.support.v4.app.FragmentActivity", 
+																	 "android.support.v7.app.AppCompatActivity", 
 																	 "android.app.TabActivity", 
 																	 "android.app.Fragment"));
 		
@@ -986,6 +989,52 @@ public class COEvolgy {
     							.replace("this","");
     	return methodName;
 	}
+    
+    public static String getMethodQualifiedName(IMethodBinding binding) {
+    	if (binding == null || binding.getDeclaringClass() == null)
+    		return null;
+    	
+    	String className = binding.getDeclaringClass().getQualifiedName();
+    	
+    	List<String> paramTypes = new ArrayList<>();
+    	for (ITypeBinding t : binding.getParameterTypes()) {
+    		paramTypes.add(t.getName());
+    	}
+    	String types = "(" + String.join(",", paramTypes) + ")";
+    	
+    	return className + "." + binding.getName() + types;
+    }
+    
+    public static String getMethodQualifiedName(MethodDeclaration node) {
+    	if (node.resolveBinding() == null || node.resolveBinding().getDeclaringClass() == null)
+			return null;
+    	
+    	String className = node.resolveBinding().getDeclaringClass().getQualifiedName();
+    	
+    	List<String> paramTypes = new ArrayList<>();
+    	for (Object o : node.parameters()) {
+    		SingleVariableDeclaration var = (SingleVariableDeclaration) o;
+    		if (var.getType() != null) paramTypes.add(var.getType().toString());
+    	}
+    	String types = "(" + String.join(",", paramTypes) + ")";
+    	
+    	return className + "." + node.getName().getIdentifier() + types;
+    }
+    
+    public static String getMethodQualifiedName(MethodInvocation node) {
+    	if (node.resolveMethodBinding() == null || node.resolveMethodBinding().getDeclaringClass() == null)
+			return null;
+    	
+    	String className = node.resolveMethodBinding().getDeclaringClass().getQualifiedName();
+    	
+    	List<String> paramTypes = new ArrayList<>();
+    	for (ITypeBinding t : node.resolveMethodBinding().getParameterTypes()) {
+    		paramTypes.add(t.getName());
+    	}
+    	String types = "(" + String.join(",", paramTypes) + ")";
+    	
+    	return className + "." + node.getName().getIdentifier() + types; 
+    }
     
 	public static int loadOperationFlag() {
 		try {

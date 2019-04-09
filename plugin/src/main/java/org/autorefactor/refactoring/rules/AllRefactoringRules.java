@@ -179,7 +179,8 @@ public final class AllRefactoringRules {
                 new HashMapUsageRefactoring(COEvolgy.loadOperationFlag()),
                 new ExcessiveMethodCallsRefactoring(COEvolgy.loadOperationFlag()),
                 new TraceMethodsRefactoring(COEvolgy.loadOperationFlag()),
-                new MemoizationChanceRefactoring(COEvolgy.loadOperationFlag())
+                new MemoizationChanceRefactoring(COEvolgy.loadOperationFlag()),
+                new MemberIgnoringMethodRefactoring(COEvolgy.loadOperationFlag())
                 );
     }
 
