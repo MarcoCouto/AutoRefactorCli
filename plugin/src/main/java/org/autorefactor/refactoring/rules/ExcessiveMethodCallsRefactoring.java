@@ -50,7 +50,6 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
 	
 	private static int operationFlag = MEASURE;
 	private static int phase = 0;
-	private static CompilationUnit mainNode = null;
 	private static String fileName = "";
 	private static String packageName = "";
 	
@@ -102,62 +101,34 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     public boolean visit(CompilationUnit node) {
     	
 		this.phase++;
-		mainNode = node;
 		fileName = node.getJavaElement().getElementName();
 		packageName = node.getPackage().getName().getFullyQualifiedName();
 		ASTVisitor visitor;
 		
-		if (this.phase == 1) {
-			List<ImportDeclaration> allImports = node.imports();
-			foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
-			visitor = new ClassVarsVisitor();
-		} else if (this.phase == 2) {
-			visitor = new LoopVisitor();
-		} else {
-			visitor = new MethodCallVisitor();
-		}
+		// 1st Traversal : Get information about class variables.
+		List<ImportDeclaration> allImports = node.imports();
+		foundTracerImport = COEvolgy.isImportIncluded(allImports, tracerImport);
+		visitor = new ClassVarsVisitor();
 		node.accept(visitor);
+		
+		// 2nd Traversal: Check for variables updated inside the loop, and about ALL existing method calls.
+		visitor = new LoopVisitor();
+		node.accept(visitor);
+		
+		// 3rd Traversal: Check if previously located method calls can be passed outside the loop, and do it.
+		visitor = new MethodCallVisitor();
+		node.accept(visitor);
+
+		fileName = "";
+		packageName = "";
+		
+		this.classVars.clear();
+		this.conditionedVars.clear();
+		this.methodCalls.clear();
 	
 	
     	return ASTHelper.VISIT_SUBTREE;
     }
-    
-    
-    /* END VISITORS */
-    
-	@Override
-	public void endVisit(CompilationUnit node) {
-			
-		if (phase == 1) {
-			// Leaving "Phase 1" (1st traversal): 
-			//     Get information about class variables.
-			//debug();
-			mainNode.accept(this);;
-			
-		} else if (phase == 2) {
-			// Leaving "Phase 2" (2nd traversal): 
-			//     Check for variables updated inside the loop, 
-			//     and about ALL existing method calls.
-			//debug();
-			mainNode.accept(this);;
-			
-		} else {
-			// Leaving "Phase 3" (3rd traversal): 
-			//     Check if previously located method calls can 
-			//     be passed outside the loop, and do it.
-			//debug();
-			phase = 0;
-			fileName = "";
-			packageName = "";
-			mainNode = null;
-			this.classVars.clear();
-			this.conditionedVars.clear();
-			this.methodCalls.clear();
-		}
-	
-		super.endVisit(node);
-	}
-	
 	
 	/* HELPERS */
 	
@@ -215,6 +186,8 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     		ArrayAccess a = (ArrayAccess) expression;
     		Expression exp = a.getArray();
     		qualifiedName = getVarFromExpression(exp);
+    		String indexName = getVarFromExpression(a.getIndex());
+    		if (!indexName.equals("")) qualifiedName += ";" + indexName;
     	} else if (expression instanceof ParenthesizedExpression) {
     		ParenthesizedExpression exp = (ParenthesizedExpression) expression;
     		qualifiedName = getVarFromExpression(exp.getExpression());
@@ -282,7 +255,7 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     }
 	
     private void debug() {
-    	if (fileName.equals("AddEnvironment.java")) {
+    	if (fileName.equals("Matrix.java")) {
 		System.out.println("\t:: VARS ::");
 		for (String v : this.classVars) {
 			System.out.println("\t\t> " + v);
@@ -547,6 +520,8 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
 	
 	private class MethodCallVisitor extends ASTVisitor {
 
+		private static final String helperVarPrefix = "_coev__var_";
+		
 		private Stack<Statement> parentLoops;
 		private String typeName;
 		private int count;
@@ -560,7 +535,7 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
         /* HELPERS */
         private boolean argsConditioned(List<String> methodArgs) {
             for (String arg : methodArgs) {
-                if (arg.equals("")) return true; // means we don't know nothing about this var,
+                if (arg.equals("")) return true; // means we don't know anything about this var,
                                                  // so we assume it is conditioned.
                 if (conditionedVars.get(visitingMethod).contains(arg)) return true;
             }
@@ -593,6 +568,20 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
         	return methodArgs;
         }
         
+        private boolean alreadyRefactored(ASTNode node) {
+        	ASTNode parentStmt = COEvolgy.getParentStatement(node);
+            if (parentStmt instanceof VariableDeclarationStatement) {
+            	VariableDeclarationStatement decl = (VariableDeclarationStatement) parentStmt;
+            	for (Object o : decl.fragments()) {
+            		VariableDeclarationFragment frag = (VariableDeclarationFragment) o;
+            		if (frag.getName().getIdentifier().startsWith(helperVarPrefix)) {
+            			return true;
+            		}
+            	}
+            }
+            
+            return false;
+        }
         
         /* VISITORS */
         @Override
@@ -600,31 +589,39 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
         	final ASTBuilder b = ctx.getASTBuilder();
             final Refactorings r = ctx.getRefactorings();
             
+            // initial check: 
+            //    when moving a method call outside a loop, it is possible that 
+            //    the moved call will be re-visited (not sure why it happens).
+            if (alreadyRefactored(node)) return ASTHelper.VISIT_SUBTREE;
+            
             String name = getVarFromExpression(node);
             // all method calls inside loops, belonging to the method `visitingMethod`.
             List<String> calls = methodCalls.get(visitingMethod);
             if (calls != null && calls.contains(expressionTag(node))) {
                 // the method call being examined exists in the inside loop `calls`.
-                // if the call variable is not conditioned, it can be passed out the loop (issue found).
+                // if the call variable is not conditioned, it can be passed outside the loop (issue found).
                 Set<String> vars = conditionedVars.get(visitingMethod);
                 List<String> args = argNames(node.arguments());
-                if (node.getExpression().getNodeType() == ASTNode.METHOD_INVOCATION) {
+                if (node.getExpression() != null && node.getExpression().getNodeType() == ASTNode.METHOD_INVOCATION) {
                 	args.addAll(argNames((MethodInvocation) node.getExpression()));
                 }
-
+                
                 if ((vars != null) && (!vars.contains(name)) && (!argsConditioned(args))) {
                 	if (!(this.typeName.equals("null")) && !(this.typeName.equals(""))) {
 	                	count++;
-	                	String helperVar = "_coev__var_" + count;
-	                	VariableDeclarationStatement newVar = b.declareStmt(b.type(this.typeName), b.simpleName(helperVar), b.copy(node));
-	                	r.insertBefore(newVar, this.parentLoops.peek());
+	                	String helperVar = helperVarPrefix + count;
+	                	VariableDeclarationStatement newVar = b.declareStmt(b.type(this.typeName), b.simpleName(helperVar), b.copySubtree(node));
+	                	
 	                	if (operationFlag == TRACE) {
-	        				// insert something to trace the patterns execution
+	        				// insert instruction to trace the patterns execution
 	                		insertTraceNode(b, r, node);
 	        			}
-	                	COEvolgy.traceRefactoring(TAG);
+	                	
+	                	r.insertBefore(newVar, this.parentLoops.peek());
 	                	r.replace(node, b.simpleName(helperVar));
 	                	
+	                	COEvolgy.traceRefactoring(TAG);
+	                		                	
 	                	return ASTHelper.DO_NOT_VISIT_SUBTREE;
                 	}
                 }

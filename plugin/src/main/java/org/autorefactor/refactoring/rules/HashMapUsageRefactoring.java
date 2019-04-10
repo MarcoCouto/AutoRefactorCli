@@ -20,8 +20,10 @@ import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.ParameterizedType;
@@ -96,6 +98,32 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     	public UsageVisitor() {
     		transformedCode = false;
     		currentVar = "";
+    	}
+    	
+    	private boolean argIsInteger(Expression exp) {
+    		String argStr = exp.toString();
+    		
+    		if (exp.getNodeType() == ASTNode.METHOD_INVOCATION) {
+    			MethodInvocation call = (MethodInvocation) exp;
+    			if (call.resolveMethodBinding() == null) {
+    				// if the argument is a method call, and we know nothing about it, 
+    				// we assume it's a method returning an integer.
+    				return true;
+    			}
+    			
+    			IMethodBinding binding = call.resolveMethodBinding();
+    			if (binding.getReturnType() == null) {
+    				// if we can examine the method binding, but the return type in 
+    				// unknown, it's more likely that it's not native (i.e., an integer).
+    				return false;
+    			}
+    			
+    			return (binding.getReturnType().getName().equals("int") || binding.getReturnType().getName().equals("Integer"));
+    		} else if (integers.contains(argStr) || (exp.getNodeType() == ASTNode.NUMBER_LITERAL)) {
+				return true;
+    		}
+    		
+    		return false;
     	}
     	
     	@Override
@@ -174,9 +202,11 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
         			Expression newRight = b.cast(castType, b.copy(right));
         			if (operationFlag == TRACE) {
         				// insert something to trace the patterns execution
-        				ASTNode parentStatement = getParentStatement(node);
-        				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
-        				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+        				if (node.resolveTypeBinding() == null || !node.resolveTypeBinding().isNested()) {
+        					ASTNode parentStatement = getParentStatement(node);
+            				boolean insideFieldDecl = (parentStatement instanceof FieldDeclaration) ? true : false;
+            				r.insertAfter(traceNode(insideFieldDecl), parentStatement);
+        				}
         			}
         			COEvolgy.traceRefactoring(TAG);
         			r.replace(right, newRight);
@@ -201,12 +231,11 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
     			int i = 0;
     			for (Object a : node.arguments()) {
     				Expression exp = (Expression) a;
-    				String argStr = exp.toString();
-    				if (integers.contains(argStr) || (exp.getNodeType() == ASTNode.NUMBER_LITERAL)) {
+    				if (argIsInteger(exp)) { 
     					args[i] = b.copy(exp);
     				} else {
     					// This particular argument's type is a Map instance, 
-    					// so we need to cast it
+    					// so we need to cast it.
     					String castTypeStr = instances.get(currentVar);
     					if (castTypeStr == null) {
     						Type castType = createGenericTypeCopy(newMapClass, typeStr, b);
