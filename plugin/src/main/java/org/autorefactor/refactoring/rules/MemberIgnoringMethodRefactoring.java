@@ -35,7 +35,7 @@ import org.eclipse.jdt.internal.corext.dom.ASTNodes;
 
 public class MemberIgnoringMethodRefactoring extends AbstractRefactoringRule {
 
-	public static final String TAG = "MemoizationChance";
+	public static final String TAG = "MemberIgnoringMethod";
 	
 	private static int operationFlag = MEASURE;
 	private static boolean foundTracerImport = false;
