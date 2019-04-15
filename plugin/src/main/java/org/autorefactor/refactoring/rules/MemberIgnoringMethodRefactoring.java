@@ -177,7 +177,7 @@ public class MemberIgnoringMethodRefactoring extends AbstractRefactoringRule {
 			node.accept(mimChecker);
 			
 			checkDependencies();
-			debug();
+			//debug();
 			// Second check: refactor methods
 			MemberIgnoringRefactor refactor = new MemberIgnoringRefactor();
 			node.accept(refactor);
