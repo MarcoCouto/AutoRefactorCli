@@ -271,6 +271,14 @@ public class MemberIgnoringChecker extends ASTVisitor{
 				return super.visit(node); 
 			}
 			
+			if (methodsDepth > 1) {
+				MethodDeclaration parent = COEvolgy.getParentMethod(node.getParent());
+				if (parent != null) {
+					addDependency(parent, methodName);
+				}
+				notMIM(methodName);
+			}
+			
 			// check modifiers, and classify method as not MIM if it finds an '@Override'
 			// NOTE: this check is necessary because methods inherited from 'Object' are not being detected with bindings.
 			for (Object o : node.modifiers()) {
@@ -324,6 +332,7 @@ public class MemberIgnoringChecker extends ASTVisitor{
 		if (methodName == null && parentMethod != null) {
 			notMIM(COEvolgy.getMethodQualifiedName(parentMethod));
 		}
+		
 		if (methodsDepth > 0 && parentMethod != null && !parentMethod.isConstructor()) {
 			Expression exp = node.getExpression();
 			if (exp != null) {
@@ -409,6 +418,7 @@ public class MemberIgnoringRefactor extends ASTVisitor {
 		
 		boolean isStatic = node.resolveBinding() == null
 							|| Modifier.isStatic(node.resolveBinding().getModifiers());
+		
 		boolean emptyBody = node.getBody() == null
 							|| node.getBody().statements() == null
 							|| node.getBody().statements().isEmpty();
@@ -418,6 +428,11 @@ public class MemberIgnoringRefactor extends ASTVisitor {
 							|| (parentClass instanceof AnonymousClassDeclaration);
 		
 		if (ignorable) {
+			return super.visit(node);
+		}
+		
+		TypeDeclaration typeClass = (TypeDeclaration) parentClass;
+		if (typeClass.resolveBinding() != null && typeClass.resolveBinding().isNested()) {
 			return super.visit(node);
 		}
 		
