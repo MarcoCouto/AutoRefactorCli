@@ -168,12 +168,16 @@ public class MemberIgnoringMethodRefactoring extends AbstractRefactoringRule {
 		fields.clear();
 		methods.clear();
 		if (!node.isInterface() && !Modifier.isAbstract(node.getModifiers())) {
-			// First check: fields & method calls
-			MemberIgnoringChecker checker = new MemberIgnoringChecker();
+			// First check: fields
+			FieldChecker checker = new FieldChecker();
 			node.accept(checker);
 			
+			// Second check: method calls
+			MemberIgnoringChecker mimChecker = new MemberIgnoringChecker();
+			node.accept(mimChecker);
+			
 			checkDependencies();
-			//debug();
+			debug();
 			// Second check: refactor methods
 			MemberIgnoringRefactor refactor = new MemberIgnoringRefactor();
 			node.accept(refactor);
@@ -185,9 +189,9 @@ public class MemberIgnoringMethodRefactoring extends AbstractRefactoringRule {
 		return super.visit(node);
     }
 
-public class MemberIgnoringChecker extends ASTVisitor{
+public class FieldChecker extends ASTVisitor{
 	
-	public MemberIgnoringChecker() {
+	public FieldChecker() {
 		
 	}
 	
@@ -198,21 +202,7 @@ public class MemberIgnoringChecker extends ASTVisitor{
 			fields.put(fullName, isNonStatic);
 		}
     }
-
-    private void addDependency(MethodDeclaration parentMethod, String reference) {
-    	TypeDeclaration parentClass = (TypeDeclaration)ASTNodes.getParent(parentMethod, ASTNode.TYPE_DECLARATION);
-        String methodName = COEvolgy.getMethodQualifiedName(parentMethod);
-        
-        if (methodName != null && !methodName.equals(reference)) {
-            if (methods.containsKey(methodName)) {
-                methods.get(methodName).add(reference);
-            } else {
-                Set<String> refs = new HashSet<>();
-                refs.add(reference);
-                methods.put(methodName, refs);
-            }
-        }
-    }
+	
 	
 	@Override
 	public boolean visit(FieldDeclaration node) {
@@ -231,7 +221,31 @@ public class MemberIgnoringChecker extends ASTVisitor{
 		addField(node, (TypeDeclaration)ASTNodes.getParent(node, ASTNode.TYPE_DECLARATION), isNonStatic);
 		return super.visit(node);
 	}
-
+	
+}
+	
+	
+public class MemberIgnoringChecker extends ASTVisitor{
+	
+	public MemberIgnoringChecker() {
+		
+	}
+	
+    private void addDependency(MethodDeclaration parentMethod, String reference) {
+    	TypeDeclaration parentClass = (TypeDeclaration)ASTNodes.getParent(parentMethod, ASTNode.TYPE_DECLARATION);
+        String methodName = COEvolgy.getMethodQualifiedName(parentMethod);
+        
+        if (methodName != null && !methodName.equals(reference)) {
+            if (methods.containsKey(methodName)) {
+                methods.get(methodName).add(reference);
+            } else {
+                Set<String> refs = new HashSet<>();
+                refs.add(reference);
+                methods.put(methodName, refs);
+            }
+        }
+    }
+	
 
 	@Override
 	public boolean visit(ThisExpression node) {
@@ -260,7 +274,7 @@ public class MemberIgnoringChecker extends ASTVisitor{
 			// check modifiers, and classify method as not MIM if it finds an '@Override'
 			// NOTE: this check is necessary because methods inherited from 'Object' are not being detected with bindings.
 			for (Object o : node.modifiers()) {
-				if (o != null && o.toString().equals("@Override")) {
+				if (o != null && (o.toString().equals("@Override") || o.toString().equals("@java.lang.Override"))) {
 					notMIM(methodName);
 				}
 			}
@@ -360,7 +374,7 @@ public class MemberIgnoringChecker extends ASTVisitor{
 			if (parentMethod != null) {
 				String methodName = COEvolgy.getMethodQualifiedName(parentMethod);
 				if (methodName != null) {
-					TypeDeclaration parentType = (TypeDeclaration)ASTNodes.getParent(node, ASTNode.TYPE_DECLARATION);
+					TypeDeclaration parentType = (TypeDeclaration) ASTNodes.getParent(node, ASTNode.TYPE_DECLARATION);
 					String qualifiedName = parentType.resolveBinding().getQualifiedName() + "." + node.getIdentifier();
 					if (node.resolveBinding() != null && node.resolveBinding().getKind() == IBinding.VARIABLE) {
 						if (isField(qualifiedName)) {
@@ -374,7 +388,9 @@ public class MemberIgnoringChecker extends ASTVisitor{
 					// Hence, we assume it is "not MIM".
 					methodName = mClassName + "." + parentMethod.getName().getIdentifier() + "(";
 					for (String m : methods.keySet()) {
-						if (m.startsWith(methodName)) notMIM(m);
+						if (m.startsWith(methodName)) {
+							notMIM(m);
+						}
 					}
 				}
 			}
