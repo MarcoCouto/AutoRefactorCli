@@ -3,7 +3,6 @@ package org.autorefactor.refactoring.rules;
 import static org.autorefactor.util.COEvolgy.MEASURE;
 import static org.autorefactor.util.COEvolgy.TRACE;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -17,6 +16,7 @@ import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
@@ -255,10 +255,26 @@ public class MemberIgnoringChecker extends ASTVisitor{
 			notMIM(methodName);
 		}
 		return super.visit(node);
-	}	
+	}
+	
+	@Override
+	public boolean visit(ClassInstanceCreation node) {
+		if (methodsDepth > 0) {
+			String parentStmt = COEvolgy.getParentStatement(node).toString();
+			if (parentStmt.startsWith("new ")) {
+				MethodDeclaration parentMethod = COEvolgy.getParentMethod(node);
+				if (parentMethod != null) {
+					String methodName = COEvolgy.getMethodQualifiedName(parentMethod);
+					notMIM(methodName);
+				}
+			}
+		}
+		return super.visit(node);
+	}
 
 	@Override
 	public boolean visit(MethodDeclaration node) {
+		if (mClassName.endsWith("ConfigStyleSelect")) System.out.println("\t=> " + node.getName());
 		if (!node.isConstructor()) {
 			methodsDepth++;
 			String methodName = COEvolgy.getMethodQualifiedName(node);
@@ -271,12 +287,22 @@ public class MemberIgnoringChecker extends ASTVisitor{
 				return super.visit(node); 
 			}
 			
+			boolean emptyBody = node.getBody() == null
+							|| node.getBody().statements() == null
+							|| node.getBody().statements().isEmpty();
+			
+			if (emptyBody) {
+				notMIM(methodName);
+				return super.visit(node);
+			}
+			
 			if (methodsDepth > 1) {
 				MethodDeclaration parent = COEvolgy.getParentMethod(node.getParent());
 				if (parent != null) {
 					addDependency(parent, methodName);
 				}
 				notMIM(methodName);
+				return super.visit(node);
 			}
 			
 			// check modifiers, and classify method as not MIM if it finds an '@Override'

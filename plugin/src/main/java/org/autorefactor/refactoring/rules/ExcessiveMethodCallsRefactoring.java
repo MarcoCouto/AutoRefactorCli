@@ -25,6 +25,7 @@ import org.eclipse.jdt.core.dom.DoStatement;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ForStatement;
+import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
@@ -181,7 +182,11 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     	} else if (expression instanceof QualifiedName) {
     		qualifiedName = getVarFromExpression((QualifiedName) expression);
     	} else if (expression instanceof MethodInvocation) {
-    		qualifiedName = getVarFromExpression((MethodInvocation) expression);
+    		MethodInvocation call = (MethodInvocation) expression;
+    		qualifiedName = getVarFromExpression(call);
+    		if (call.arguments() != null && !call.arguments().isEmpty()) {
+    			for (Object o : call.arguments()) qualifiedName += ";" + getVarFromExpression((Expression)o);
+    		}
     	} else if (expression instanceof ArrayAccess) {
     		ArrayAccess a = (ArrayAccess) expression;
     		Expression exp = a.getArray();
@@ -255,7 +260,6 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     }
 	
     private void debug() {
-    	if (fileName.equals("Matrix.java")) {
 		System.out.println("\t:: VARS ::");
 		for (String v : this.classVars) {
 			System.out.println("\t\t> " + v);
@@ -281,7 +285,6 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
             }
         }
         System.out.println("\n");
-    	}
     }
 	
 	
@@ -355,6 +358,8 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
 			if (this.insideLoop > 0) {
 				String varName = getVarFromExpression(node);
                 this.addMethodCall(node);
+                
+                if (this.insideLoopCondition && this.insideAssignment) this.addConditionedVar(varName);
                 
                 if (!this.insideLoopCondition) {
                     if (!this.insideAssignment) {
@@ -583,6 +588,16 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
             return false;
         }
         
+        private String getTypeOfExpression(MethodInvocation node) {
+        	IMethodBinding binding = node.resolveMethodBinding();
+        	if (node.toString().startsWith("Encoding.UTF_8.toString")) {
+        	}
+        	
+        	if (binding == null || binding.getReturnType() == null) return null;
+        	
+        	return binding.getReturnType().getName(); 
+        }
+        
         /* VISITORS */
         @Override
         public boolean visit(MethodInvocation node) {
@@ -607,10 +622,13 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
                 }
                 
                 if ((vars != null) && (!vars.contains(name)) && (!argsConditioned(args))) {
-                	if (!(this.typeName.equals("null")) && !(this.typeName.equals(""))) {
+                	String currentType = getTypeOfExpression(node);
+                	if (currentType == null) currentType = this.typeName;
+                	
+                	if (!(currentType.equals("null")) && !(currentType.equals(""))) {
 	                	count++;
 	                	String helperVar = helperVarPrefix + count;
-	                	VariableDeclarationStatement newVar = b.declareStmt(b.type(this.typeName), b.simpleName(helperVar), b.copySubtree(node));
+	                	VariableDeclarationStatement newVar = b.declareStmt(b.type(currentType), b.simpleName(helperVar), b.copySubtree(node));
 	                	
 	                	if (operationFlag == TRACE) {
 	        				// insert instruction to trace the patterns execution
@@ -725,12 +743,12 @@ public class ExcessiveMethodCallsRefactoring extends AbstractRefactoringRule {
     				element = (ASTNode) ((Block) s).statements().get(0);
     			} 
     		} else if (parent instanceof WhileStatement) {
-    			s = ((ForStatement) parent).getBody();
+    			s = ((WhileStatement) parent).getBody();
     			if (s instanceof Block) {
     				element = (ASTNode) ((Block) s).statements().get(0);
     			} 
     		} else if (parent instanceof DoStatement){
-    			s = ((ForStatement) parent).getBody();
+    			s = ((DoStatement) parent).getBody();
     			if (s instanceof Block) {
     				element = (ASTNode) ((Block) s).statements().get(0);
     			} 

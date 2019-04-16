@@ -46,7 +46,7 @@ public class HashMapUsageRefactoring extends AbstractRefactoringRule {
 	private static boolean foundArrayImport = false;
 	private static boolean foundTracerImport = false;
 	private static final String newMapClass = "ArrayMap";
-	private static final String arrayMapImport = "android.util.ArrayMap";
+	private static final String arrayMapImport = "android.support.v4.util.ArrayMap";
 	private static final String tracerImport = "org.greenlab.coevolgy.util.Tracer";
 	private static int operationFlag = MEASURE;
 	
