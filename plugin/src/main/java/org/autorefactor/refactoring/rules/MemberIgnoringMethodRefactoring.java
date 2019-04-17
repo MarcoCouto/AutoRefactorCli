@@ -274,7 +274,6 @@ public class MemberIgnoringChecker extends ASTVisitor{
 
 	@Override
 	public boolean visit(MethodDeclaration node) {
-		if (mClassName.endsWith("ConfigStyleSelect")) System.out.println("\t=> " + node.getName());
 		if (!node.isConstructor()) {
 			methodsDepth++;
 			String methodName = COEvolgy.getMethodQualifiedName(node);
